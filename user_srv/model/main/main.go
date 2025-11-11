@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
+	"io"
 	"log"
 	"mx-shop-srvs/user_srv/model"
 	"os"
@@ -11,6 +14,14 @@ import (
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
+
+// 生成MD5值
+func genMD5(originStr string) string {
+	MD5 := md5.New()
+	_, _ = io.WriteString(MD5, originStr)
+
+	return hex.EncodeToString(MD5.Sum(nil))
+}
 
 func main() {
 	dsn := "root:12345678@tcp(127.0.0.1:3306)/mxshop_user_srv?charset=utf8mb4&parseTime=True&loc=Local"
