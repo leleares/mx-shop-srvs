@@ -20,7 +20,9 @@ import (
 
 // 在此文件中实现生成的user.pb.go中的interface即可。
 // 找到 type UserServer interface 将其中的方法实现即可。
-type UserServer struct{}
+type UserServer struct {
+	proto.UnimplementedUserServer // 新版grpc强制要求添加，无意义
+}
 
 func modelToResponse(user model.User) proto.UserInfoResponse {
 	// 在grpc的message字段中如果有默认值的话，不能赋值nil进去，容易出错
