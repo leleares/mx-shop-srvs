@@ -4,6 +4,7 @@ go 1.24.4
 
 require (
 	github.com/anaskhan96/go-password-encoder v0.0.0-20201010210601-c765b799fd72
+	github.com/golang/protobuf v1.5.4
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
 	gorm.io/driver/mysql v1.6.0
