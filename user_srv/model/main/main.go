@@ -50,7 +50,7 @@ func main() {
 	}
 
 	options := &password.Options{16, 100, 32, sha512.New}
-	salt, encodedPwd := password.Encode("generic password", options)
+	salt, encodedPwd := password.Encode("12345678", options)
 	newPassword := fmt.Sprintf("$pbkdf2$%s$%s", salt, encodedPwd)
 
 	for i := 0; i < 10; i++ {
