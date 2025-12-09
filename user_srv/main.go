@@ -7,6 +7,7 @@ import (
 	"mx-shop-srvs/user_srv/handler"
 	"mx-shop-srvs/user_srv/initialize"
 	"mx-shop-srvs/user_srv/proto"
+	"mx-shop-srvs/user_srv/utils"
 	"net"
 
 	"github.com/hashicorp/consul/api"
@@ -20,7 +21,7 @@ func main() {
 	s := zap.S()
 	// flag处理的参数可在运行可执行文件时注入
 	IP := flag.String("ip", "0.0.0.0", "ip地址")
-	Port := flag.Int("port", 50051, "端口号")
+	Port := flag.Int("port", 0, "端口号")
 
 	// initialize
 	initialize.InitLogger()
@@ -30,6 +31,13 @@ func main() {
 	flag.Parse()
 	s.Infof("ip", *IP)
 	s.Infof("port", *Port)
+	if *Port == 0 {
+		port, err := utils.GetFreeAddr()
+		// err 为空，证明没报错
+		if err == nil {
+			*Port = port
+		}
+	}
 
 	server := grpc.NewServer()
 	proto.RegisterUserServer(server, &handler.UserServer{})
@@ -40,7 +48,7 @@ func main() {
 
 	// 注册服务健康检查
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
-	err = Register()
+	err = Register(*Port)
 	if err != nil {
 		s.Errorf("注册健康检查时发生了错误")
 	}
@@ -52,7 +60,7 @@ func main() {
 }
 
 // 将此服务注册到服务健康检查中心consul
-func Register() error {
+func Register(port int) error {
 	conf := api.DefaultConfig()
 	conf.Address = fmt.Sprintf("%s:%d", global.ServerConfig.ConsulInfo.Host, global.ServerConfig.ConsulInfo.Port)
 
@@ -61,8 +69,8 @@ func Register() error {
 		panic(err)
 	}
 
-	var localHost string = "192.168.1.106"
-	var localPort int = 50051
+	var localHost string = "192.168.130.43"
+	var localPort int = port
 
 	check := api.AgentServiceCheck{
 		GRPC:                           fmt.Sprintf("%s:%d", localHost, localPort),
