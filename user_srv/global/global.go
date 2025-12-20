@@ -8,5 +8,6 @@ import (
 
 var (
 	ServerConfig *config.ServerConfig = &config.ServerConfig{} // 全局配置文件
-	DB           *gorm.DB                                      // 全局DB连接
+	NacosConfig  *config.NacosConfig  = &config.NacosConfig{}
+	DB           *gorm.DB             // 全局DB连接
 )

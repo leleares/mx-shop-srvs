@@ -70,7 +70,7 @@ func Register(port int) error {
 		panic(err)
 	}
 
-	var localHost string = "192.168.1.106"
+	var localHost string = "172.20.10.2"
 	var localPort int = port
 
 	// 注意，当应用负载均衡策略以后，将此srv服务注册到consul时将不能使用固定id的方式，原因在于该服务可能运行于多台服务器上

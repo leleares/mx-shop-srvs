@@ -140,7 +140,7 @@ func (s *UserServer) CreateUser(ctx context.Context, req *proto.CreateUserInfo) 
 	result = global.DB.Create(&user)
 
 	if result.Error != nil {
-		return nil, status.Errorf(codes.Internal, result.Error.Error())
+		return nil, status.Error(codes.Internal, result.Error.Error())
 	}
 
 	if result.RowsAffected < 1 {
