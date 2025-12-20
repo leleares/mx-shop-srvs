@@ -11,6 +11,7 @@ import (
 	"net"
 
 	"github.com/hashicorp/consul/api"
+	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -29,8 +30,6 @@ func main() {
 	initialize.InitDB()
 
 	flag.Parse()
-	s.Infof("ip", *IP)
-	s.Infof("port", *Port)
 	if *Port == 0 {
 		port, err := utils.GetFreeAddr()
 		// err 为空，证明没报错
@@ -38,6 +37,8 @@ func main() {
 			*Port = port
 		}
 	}
+	s.Infof("ip", *IP)
+	s.Infof("port", *Port)
 
 	server := grpc.NewServer()
 	proto.RegisterUserServer(server, &handler.UserServer{})
@@ -69,9 +70,11 @@ func Register(port int) error {
 		panic(err)
 	}
 
-	var localHost string = "192.168.130.43"
+	var localHost string = "192.168.1.106"
 	var localPort int = port
 
+	// 注意，当应用负载均衡策略以后，将此srv服务注册到consul时将不能使用固定id的方式，原因在于该服务可能运行于多台服务器上
+	// 后面运行的服务会覆盖在consul中的注册，导致consul中永远只有此srv的一个服务。这里使用uuid来为每次向consul中注册生成唯一id
 	check := api.AgentServiceCheck{
 		GRPC:                           fmt.Sprintf("%s:%d", localHost, localPort),
 		Timeout:                        "5s",
@@ -82,7 +85,9 @@ func Register(port int) error {
 	registration := new(api.AgentServiceRegistration)
 	registration.Address = localHost
 	registration.Port = localPort
-	registration.ID = global.ServerConfig.Name
+	// 每次启动服务，注册到consul的id将是唯一的。负载均衡需要
+	serviceId := fmt.Sprintf("%s", uuid.NewV4())
+	registration.ID = serviceId
 	registration.Name = global.ServerConfig.Name
 	registration.Tags = []string{"lele", "user", "srv"}
 	registration.Check = &check
