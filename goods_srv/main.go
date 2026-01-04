@@ -41,7 +41,7 @@ func main() {
 	s.Infof("port", *Port)
 
 	server := grpc.NewServer()
-	proto.RegisterUserServer(server, &handler.UserServer{})
+	proto.RegisterGoodsServer(server, &handler.GoodsServer{})
 	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *IP, *Port))
 	if err != nil {
 		panic("failed to listen:" + err.Error())
@@ -89,7 +89,7 @@ func Register(port int) error {
 	serviceId := fmt.Sprintf("%s", uuid.NewV4())
 	registration.ID = serviceId
 	registration.Name = global.ServerConfig.Name
-	registration.Tags = []string{"lele", "user", "srv"}
+	registration.Tags = global.ServerConfig.Tags
 	registration.Check = &check
 
 	err = client.Agent().ServiceRegister(registration)

@@ -89,7 +89,7 @@ func Register(port int) error {
 	serviceId := fmt.Sprintf("%s", uuid.NewV4())
 	registration.ID = serviceId
 	registration.Name = global.ServerConfig.Name
-	registration.Tags = []string{"lele", "user", "srv"}
+	registration.Tags = global.ServerConfig.Tags
 	registration.Check = &check
 
 	err = client.Agent().ServiceRegister(registration)

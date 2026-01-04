@@ -1,0 +1,15 @@
+{
+    "name": "goods-srv",
+    "tags":["lele", "goods", "srv"],
+    "mysql": {
+        "host": "127.0.0.1",
+        "port": 3306,
+        "db": "mxshop_goods_srv",
+        "user": "root",
+        "password": "12345678"
+    },
+    "consul": {
+        "host": "127.0.0.1",
+        "port": 8500
+    }
+}

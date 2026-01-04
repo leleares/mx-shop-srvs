@@ -1,6 +1,6 @@
 nacos:
   host: "127.0.0.1"
   port: 8848
-  namespace: 'a3dfcf76-c113-4504-89fc-feb656d45913'
+  namespace: '1e4b63ac-3324-47e1-9484-404a293a880c'
   group: 'prod'
-  dataid: 'user-srv.json'
+  dataid: 'goods-srv.json'
