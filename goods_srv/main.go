@@ -22,7 +22,7 @@ func main() {
 	s := zap.S()
 	// flag处理的参数可在运行可执行文件时注入
 	IP := flag.String("ip", "0.0.0.0", "ip地址")
-	Port := flag.Int("port", 0, "端口号")
+	Port := flag.Int("port", 50051, "端口号")
 
 	// initialize
 	initialize.InitLogger()
@@ -39,6 +39,8 @@ func main() {
 	}
 	s.Infof("ip", *IP)
 	s.Infof("port", *Port)
+
+	fmt.Println("Port🐶", *Port)
 
 	server := grpc.NewServer()
 	proto.RegisterGoodsServer(server, &handler.GoodsServer{})
