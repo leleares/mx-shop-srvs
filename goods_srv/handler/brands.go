@@ -5,6 +5,10 @@ import (
 	"mx-shop-srvs/goods_srv/global"
 	"mx-shop-srvs/goods_srv/model"
 	"mx-shop-srvs/goods_srv/proto"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // 品牌
@@ -39,6 +43,58 @@ func (s *GoodsServer) BrandList(ctx context.Context, req *proto.BrandFilterReque
 	return &resp, nil
 }
 
-// CreateBrand(context.Context, *BrandRequest) (*BrandInfoResponse, error)
-// DeleteBrand(context.Context, *BrandRequest) (*emptypb.Empty, error)
-// UpdateBrand(context.Context, *BrandRequest) (*emptypb.Empty, error)
+func (s *GoodsServer) CreateBrand(ctx context.Context, req *proto.BrandRequest) (*proto.BrandInfoResponse, error) {
+	var brand model.Brands
+	// 校验入参合法性，例如不能有重名的品牌
+	result := global.DB.Where("name = ?", req.Name).First(&brand)
+	if result.RowsAffected >= 1 {
+		return nil, status.Errorf(codes.InvalidArgument, "已存在该品牌")
+	}
+
+	brand.Name = req.Name
+	brand.Logo = req.Logo
+
+	result = global.DB.Create(&brand)
+	if result.Error != nil {
+		return nil, status.Error(codes.Internal, result.Error.Error())
+	}
+
+	if result.RowsAffected < 1 {
+		return nil, status.Errorf(codes.Internal, "创建品牌失败")
+	}
+
+	var resp proto.BrandInfoResponse
+	resp = proto.BrandInfoResponse{
+		Id:   brand.ID,
+		Name: brand.Name,
+		Logo: brand.Logo,
+	}
+	return &resp, nil
+}
+
+func (s *GoodsServer) DeleteBrand(ctx context.Context, req *proto.BrandRequest) (*emptypb.Empty, error) {
+	result := global.DB.Delete(&model.Brands{}).Where("id = ?", req.Id)
+
+	if result.RowsAffected >= 1 {
+		return &emptypb.Empty{}, nil
+	}
+	return &emptypb.Empty{}, status.Errorf(codes.Internal, result.Error.Error())
+}
+
+func (s *GoodsServer) UpdateBrand(ctx context.Context, req *proto.BrandRequest) (*emptypb.Empty, error) {
+	result := global.DB.First(&model.Brands{}, req.Id)
+	if result.RowsAffected < 1 {
+		return nil, status.Errorf(codes.Internal, "品牌不存在")
+	}
+
+	var brand model.Brands
+	brand.Logo = req.Logo
+	brand.Name = req.Name
+
+	result = global.DB.Save(&brand)
+	if result.RowsAffected < 1 {
+		return nil, status.Errorf(codes.Internal, "更新失败")
+	}
+
+	return &emptypb.Empty{}, nil
+}
