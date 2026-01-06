@@ -10,10 +10,15 @@ import (
 // 品牌
 func (s *GoodsServer) BrandList(ctx context.Context, req *proto.BrandFilterRequest) (*proto.BrandListResponse, error) {
 	var brands []model.Brands
-	result := global.DB.Find(&brands)
+	// 利用grom能力进行分页
+	result := global.DB.Scopes(Paginate(int(req.Pages), int(req.PagePerNums))).Find(&brands)
 	if result.Error != nil {
 		return nil, result.Error
 	}
+
+	var total int64
+	// 这里查询Brands表总共有多少条记录
+	global.DB.Model(model.Brands{}).Count(&total)
 
 	var data []*proto.BrandInfoResponse
 	for _, brand := range brands {
@@ -27,8 +32,8 @@ func (s *GoodsServer) BrandList(ctx context.Context, req *proto.BrandFilterReque
 
 	var resp proto.BrandListResponse
 	resp = proto.BrandListResponse{
-		Total: int32(len(brands)),
-		Data:  data,
+		Total: int32(total), // 表里总记录数
+		Data:  data,         // 分页数据
 	}
 
 	return &resp, nil

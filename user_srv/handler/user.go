@@ -65,17 +65,14 @@ func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 func (s *UserServer) GetUserList(ctx context.Context, req *proto.PageInfo) (*proto.UserListResponse, error) {
 	// 获取所有用户
 	var users []model.User
-	result := global.DB.Find(&users)
-
+	// 利用grom能力进行分页
+	result := global.DB.Scopes(Paginate(int(req.Pn), int(req.PSize))).Find(&users)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
 	rsp := &proto.UserListResponse{}
 	rsp.Total = uint32(result.RowsAffected)
-
-	// 利用grom能力进行分页，重整users数据
-	global.DB.Scopes(Paginate(int(req.Pn), int(req.PSize))).Find(&users)
 
 	var userInfoList []*proto.UserInfoResponse // 每个元素都是指针
 	for _, user := range users {

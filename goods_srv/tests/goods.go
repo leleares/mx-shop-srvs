@@ -29,7 +29,10 @@ func main() {
 }
 
 func TestGetBrandsList() {
-	rsp, _ := goodsClient.BrandList(context.Background(), &proto.BrandFilterRequest{})
+	rsp, _ := goodsClient.BrandList(context.Background(), &proto.BrandFilterRequest{
+		Pages:       2,
+		PagePerNums: 5,
+	})
 
 	fmt.Println(rsp)
 }
