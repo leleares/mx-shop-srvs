@@ -73,23 +73,24 @@ func (s *GoodsServer) CreateBrand(ctx context.Context, req *proto.BrandRequest) 
 }
 
 func (s *GoodsServer) DeleteBrand(ctx context.Context, req *proto.BrandRequest) (*emptypb.Empty, error) {
-	result := global.DB.Delete(&model.Brands{}).Where("id = ?", req.Id)
+	result := global.DB.Where("id = ?", req.Id).Delete(&model.Brands{})
 
 	if result.RowsAffected >= 1 {
 		return &emptypb.Empty{}, nil
 	}
-	return &emptypb.Empty{}, status.Errorf(codes.Internal, result.Error.Error())
+
+	return &emptypb.Empty{}, status.Errorf(codes.Internal, "删除失败")
 }
 
 func (s *GoodsServer) UpdateBrand(ctx context.Context, req *proto.BrandRequest) (*emptypb.Empty, error) {
-	result := global.DB.First(&model.Brands{}, req.Id)
+	var brand model.Brands
+	result := global.DB.First(&brand, req.Id)
 	if result.RowsAffected < 1 {
 		return nil, status.Errorf(codes.Internal, "品牌不存在")
 	}
 
-	var brand model.Brands
-	brand.Logo = req.Logo
 	brand.Name = req.Name
+	brand.Logo = req.Logo
 
 	result = global.DB.Save(&brand)
 	if result.RowsAffected < 1 {

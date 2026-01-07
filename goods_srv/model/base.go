@@ -20,6 +20,14 @@ type BaseModel struct {
 	IsDeleted bool
 }
 
+// BeforeDelete 在调用 GORM Delete()（包括软删除）时触发。
+// GORM 软删除默认只会设置 DeletedAt，不会自动更新自定义的 IsDeleted 字段；
+// 这里将 IsDeleted 同步为 true，方便业务侧按该字段做额外判断或兼容旧逻辑。
+func (m *BaseModel) BeforeDelete(tx *gorm.DB) error {
+	tx.Statement.SetColumn("IsDeleted", true)
+	return nil
+}
+
 func (g *GormList) Scan(value interface{}) error {
 	bytes, ok := value.([]byte)
 	if !ok {
