@@ -46,6 +46,9 @@ func (s *GoodsServer) UpdateBanner(ctx context.Context, req *proto.BannerRequest
 	if result.RowsAffected == 0 {
 		return nil, status.Errorf(codes.NotFound, "未找到该banner")
 	}
+	banner.Index = req.Index
+	banner.Image = req.Image
+	banner.Url = req.Url
 
 	result = global.DB.Save(&banner)
 	if result.RowsAffected >= 1 {

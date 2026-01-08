@@ -6,6 +6,7 @@ import (
 	"mx-shop-srvs/goods_srv/proto"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -24,8 +25,8 @@ func init() {
 }
 
 func main() {
-	TestDeleteBrand()
-	conn.Close()
+	TestDeleteBanner()
+	defer conn.Close()
 }
 
 func TestGetBrandsList() {
@@ -62,4 +63,40 @@ func TestDeleteBrand() {
 	rsp, _ := goodsClient.DeleteBrand(context.Background(), &brand)
 
 	fmt.Println(rsp)
+}
+
+func TestCreateBanner() {
+	banner := proto.BannerRequest{
+		Index: 0,
+		Image: "https://piccdn2.umiwi.com/fe-oss/default/MTc2Nzg1MjkxNzA2.png",
+		Url:   "https://www.dedao.cn/",
+	}
+
+	resp, _ := goodsClient.CreateBanner(context.Background(), &banner)
+	fmt.Println(resp)
+}
+
+func TestDeleteBanner() {
+	resp, _ := goodsClient.DeleteBanner(context.Background(), &proto.BannerRequest{
+		Id: 4,
+	})
+
+	fmt.Println(resp)
+}
+
+func TestUpdateBanner() {
+	banner := proto.BannerRequest{
+		Id:    5,
+		Index: 2,
+		Image: "https://piccdn2.umiwi.com/fe-oss/default/MTc2Nzg1MjkxNzA2.png",
+		Url:   "https://www.dedao1.cn/",
+	}
+
+	resp, _ := goodsClient.UpdateBanner(context.Background(), &banner)
+	fmt.Println(resp)
+}
+
+func TestGetBannerList() {
+	resp, _ := goodsClient.BannerList(context.Background(), &emptypb.Empty{})
+	fmt.Println(resp)
 }
