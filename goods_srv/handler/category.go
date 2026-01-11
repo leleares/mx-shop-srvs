@@ -103,6 +103,53 @@ func (s *GoodsServer) GetSubCategory(ctx context.Context, req *proto.CategoryLis
 	return &resp, nil
 }
 
-// CreateCategory(context.Context, *CategoryInfoRequest) (*CategoryInfoResponse, error)
-// DeleteCategory(context.Context, *DeleteCategoryRequest) (*emptypb.Empty, error)
-// UpdateCategory(context.Context, *CategoryInfoRequest) (*emptypb.Empty, error)
+func (s *GoodsServer) CreateCategory(ctx context.Context, req *proto.CategoryInfoRequest) (*proto.CategoryInfoResponse, error) {
+	category := model.Category{}
+	// 使用map的原因是当level为1的时候，不给数据库传parent_category_id这个字段，使其在库里为null
+	// 倘若使用struct的方式来构建，由于parent_category_id的类型为int，则其缺省值为0，由于其作为了外键，因此数据库会查id为0的分类，找不到就会报错。
+	cMap := map[string]interface{}{}
+	cMap["name"] = req.Name
+	cMap["level"] = req.Level
+	cMap["is_tab"] = req.IsTab
+	if req.Level != 1 {
+		cMap["parent_category_id"] = req.ParentCategory
+	}
+	result := global.DB.Model(&model.Category{}).Create(cMap)
+	if result.RowsAffected == 0 {
+		return nil, result.Error
+	}
+	return &proto.CategoryInfoResponse{Id: int32(category.ID)}, nil
+}
+
+func (s *GoodsServer) DeleteCategory(ctx context.Context, req *proto.DeleteCategoryRequest) (*emptypb.Empty, error) {
+
+	result := global.DB.Where("id = ?", req.Id).Delete(&model.Category{})
+	if result.RowsAffected == 0 {
+		return &emptypb.Empty{}, result.Error
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *GoodsServer) UpdateCategory(ctx context.Context, req *proto.CategoryInfoRequest) (*emptypb.Empty, error) {
+	var category model.Category
+	result := global.DB.First(&category, req.Id)
+	if result.RowsAffected == 0 {
+		return &emptypb.Empty{}, status.Errorf(codes.NotFound, "未找到该分类")
+	}
+
+	cMap := map[string]interface{}{}
+	cMap["name"] = req.Name
+	cMap["level"] = req.Level
+	cMap["is_tab"] = req.IsTab
+	if req.Level != 1 {
+		cMap["parent_category_id"] = req.ParentCategory
+	}
+
+	result = global.DB.Model(&model.Category{}).Where("id = ?", req.Id).Updates(cMap)
+	if result.RowsAffected == 0 {
+		return &emptypb.Empty{}, status.Errorf(codes.Internal, "更新失败")
+	}
+
+	return &emptypb.Empty{}, nil
+}

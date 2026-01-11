@@ -26,7 +26,7 @@ func init() {
 }
 
 func main() {
-	TestGetSubCategoryList()
+	TestDeleteCategory()
 	defer conn.Close()
 }
 
@@ -113,6 +113,44 @@ func TestGetCategoryList() {
 func TestGetSubCategoryList() {
 	resp, err := goodsClient.GetSubCategory(context.Background(), &proto.CategoryListRequest{
 		Id: 130358,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestCreateCategory() {
+	resp, err := goodsClient.CreateCategory(context.Background(), &proto.CategoryInfoRequest{
+		Name:  "测试分类",
+		Level: 1,
+		IsTab: false,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestUpdateCategory() {
+	resp, err := goodsClient.UpdateCategory(context.Background(), &proto.CategoryInfoRequest{
+		Id:    238015,
+		Name:  "测试分类11",
+		Level: 1,
+		IsTab: false,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestDeleteCategory() {
+	resp, err := goodsClient.DeleteCategory(context.Background(), &proto.DeleteCategoryRequest{
+		Id: 238015,
 	})
 	if err != nil {
 		panic(err)
