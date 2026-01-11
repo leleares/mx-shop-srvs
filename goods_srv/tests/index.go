@@ -26,7 +26,7 @@ func init() {
 }
 
 func main() {
-	TestDeleteCategory()
+	TestGetCategoryBrandList()
 	defer conn.Close()
 }
 
@@ -151,6 +151,29 @@ func TestUpdateCategory() {
 func TestDeleteCategory() {
 	resp, err := goodsClient.DeleteCategory(context.Background(), &proto.DeleteCategoryRequest{
 		Id: 238015,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestCategoryBrandList() {
+	resp, err := goodsClient.CategoryBrandList(context.Background(), &proto.CategoryBrandFilterRequest{
+		Pages:       1,
+		PagePerNums: 10,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestGetCategoryBrandList() {
+	resp, err := goodsClient.GetCategoryBrandList(context.Background(), &proto.CategoryInfoRequest{
+		Id: 130366,
 	})
 	if err != nil {
 		panic(err)
