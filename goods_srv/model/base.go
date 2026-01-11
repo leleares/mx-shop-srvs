@@ -43,3 +43,9 @@ func (g GormList) Value() (driver.Value, error) {
 	}
 	return json.Marshal(g)
 }
+
+// json log func
+func ToStringLog(v interface{}) {
+	b, _ := json.Marshal(&v)
+	fmt.Println(string(b))
+}

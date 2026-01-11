@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"mx-shop-srvs/goods_srv/model"
 	"mx-shop-srvs/goods_srv/proto"
 
 	"google.golang.org/grpc"
@@ -25,7 +26,7 @@ func init() {
 }
 
 func main() {
-	TestGetCategoryList()
+	TestGetSubCategoryList()
 	defer conn.Close()
 }
 
@@ -107,4 +108,15 @@ func TestGetCategoryList() {
 		panic(err)
 	}
 	fmt.Println(resp.JsonData)
+}
+
+func TestGetSubCategoryList() {
+	resp, err := goodsClient.GetSubCategory(context.Background(), &proto.CategoryListRequest{
+		Id: 130358,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
 }
