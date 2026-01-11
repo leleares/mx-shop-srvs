@@ -25,7 +25,7 @@ func init() {
 }
 
 func main() {
-	TestDeleteBanner()
+	TestGetCategoryList()
 	defer conn.Close()
 }
 
@@ -99,4 +99,12 @@ func TestUpdateBanner() {
 func TestGetBannerList() {
 	resp, _ := goodsClient.BannerList(context.Background(), &emptypb.Empty{})
 	fmt.Println(resp)
+}
+
+func TestGetCategoryList() {
+	resp, err := goodsClient.GetAllCategorysList(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(resp.JsonData)
 }
