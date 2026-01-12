@@ -39,6 +39,7 @@ func (s *GoodsServer) DeleteBanner(ctx context.Context, req *proto.BannerRequest
 	}
 	return nil, result.Error
 }
+
 func (s *GoodsServer) UpdateBanner(ctx context.Context, req *proto.BannerRequest) (*emptypb.Empty, error) {
 	var banner model.Banner
 	banner.ID = req.Id
@@ -57,6 +58,7 @@ func (s *GoodsServer) UpdateBanner(ctx context.Context, req *proto.BannerRequest
 
 	return nil, result.Error
 }
+
 func (s *GoodsServer) BannerList(ctx context.Context, req *emptypb.Empty) (*proto.BannerListResponse, error) {
 	var bannerList []model.Banner
 	result := global.DB.Find(&bannerList)
