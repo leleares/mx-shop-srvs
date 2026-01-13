@@ -38,17 +38,14 @@ type Banner struct {
 
 type Goods struct {
 	BaseModel
-
-	CategoryID int32 `gorm:"type:int;not null"`
-	Category   Category
-	BrandsID   int32 `gorm:"type:int;not null"`
-	Brands     Brands
-
-	OnSale   bool `gorm:"default:false;not null"`
-	ShipFree bool `gorm:"default:false;not null"`
-	IsNew    bool `gorm:"default:false;not null"`
-	IsHot    bool `gorm:"default:false;not null"`
-
+	CategoryID      int32 `gorm:"type:int;not null"`
+	Category        Category
+	BrandsID        int32 `gorm:"type:int;not null"`
+	Brands          Brands
+	OnSale          bool     `gorm:"default:false;not null"`
+	ShipFree        bool     `gorm:"default:false;not null"`
+	IsNew           bool     `gorm:"default:false;not null"`
+	IsHot           bool     `gorm:"default:false;not null"`
 	Name            string   `gorm:"type:varchar(50);not null"`
 	GoodsSn         string   `gorm:"type:varchar(50);not null"`
 	ClickNum        int32    `gorm:"type:int;default:0;not null"`

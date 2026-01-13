@@ -26,7 +26,7 @@ func init() {
 }
 
 func main() {
-	TestGetCategoryBrandList()
+	TestGetGoodsList()
 	defer conn.Close()
 }
 
@@ -174,6 +174,20 @@ func TestCategoryBrandList() {
 func TestGetCategoryBrandList() {
 	resp, err := goodsClient.GetCategoryBrandList(context.Background(), &proto.CategoryInfoRequest{
 		Id: 130366,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestGetGoodsList() {
+	resp, err := goodsClient.GoodsList(context.Background(), &proto.GoodsFilterRequest{
+		TopCategory: 136982,
+		// KeyWords:    "火龙果",
+		// PriceMin:    20,
+		// PriceMax:    30,
 	})
 	if err != nil {
 		panic(err)

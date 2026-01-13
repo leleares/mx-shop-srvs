@@ -62,9 +62,9 @@ func (s *GoodsServer) GoodsList(ctx context.Context, req *proto.GoodsFilterReque
 		if category.Level == 1 {
 			subSqlQuery = fmt.Sprintf("(select id from category where parent_category_id in (select id from category where parent_category_id = %d))", req.TopCategory)
 		} else if category.Level == 2 {
-			subSqlQuery = fmt.Sprintf("(select id from category where parent_category_id = %d))", req.TopCategory)
+			subSqlQuery = fmt.Sprintf("(select id from category where parent_category_id = %d)", req.TopCategory)
 		} else {
-			subSqlQuery = fmt.Sprintf("(select id from category where id = %d))", req.TopCategory)
+			subSqlQuery = fmt.Sprintf("select id from category where id = %d", req.TopCategory)
 		}
 		localDB = localDB.Where(fmt.Sprintf("category_id in (%s)", subSqlQuery))
 	}
@@ -73,13 +73,16 @@ func (s *GoodsServer) GoodsList(ctx context.Context, req *proto.GoodsFilterReque
 	localDB.Model(&model.Goods{}).Count(&count)
 	resp.Total = int32(count)
 
-	result := localDB.Scopes(Paginate(int(req.Pages), int(req.PagePerNums))).Find(&goodsList)
+	result := localDB.Preload("Category").Preload("Brands").Scopes(Paginate(int(req.Pages), int(req.PagePerNums))).Find(&goodsList)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
 	var goodInfoResp []*proto.GoodsInfoResponse
-	for _, g := range goodsList {
+	for idx, g := range goodsList {
+		if idx == 1 {
+			model.ToStringLog(g)
+		}
 		goodInfoResp = append(goodInfoResp, &proto.GoodsInfoResponse{
 			Id:              g.ID,
 			CategoryId:      g.CategoryID,
@@ -98,6 +101,15 @@ func (s *GoodsServer) GoodsList(ctx context.Context, req *proto.GoodsFilterReque
 			IsNew:           g.IsNew,
 			IsHot:           g.IsHot,
 			OnSale:          g.OnSale,
+			Category: &proto.CategoryBriefInfoResponse{
+				Id:   g.Category.ID,
+				Name: g.Category.Name,
+			},
+			Brand: &proto.BrandInfoResponse{
+				Id:   g.Brands.ID,
+				Name: g.Brands.Name,
+				Logo: g.Brands.Logo,
+			},
 		})
 	}
 	resp.Data = goodInfoResp
