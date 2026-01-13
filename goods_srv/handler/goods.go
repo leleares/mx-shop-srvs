@@ -12,6 +12,37 @@ type GoodsServer struct {
 	proto.UnimplementedGoodsServer // 新版grpc强制要求添加，无意义
 }
 
+func GoodModelToResp(g model.Goods) *proto.GoodsInfoResponse {
+	return &proto.GoodsInfoResponse{
+		Id:              g.ID,
+		CategoryId:      g.CategoryID,
+		Name:            g.Name,
+		GoodsSn:         g.GoodsSn,
+		ClickNum:        g.ClickNum,
+		SoldNum:         g.SoldNum,
+		FavNum:          g.FavNum,
+		MarketPrice:     g.MarketPrice,
+		ShopPrice:       g.ShopPrice,
+		GoodsBrief:      g.GoodsBrief,
+		ShipFree:        g.ShipFree,
+		Images:          g.Images,
+		DescImages:      g.DescImages,
+		GoodsFrontImage: g.GoodsFrontImage,
+		IsNew:           g.IsNew,
+		IsHot:           g.IsHot,
+		OnSale:          g.OnSale,
+		Category: &proto.CategoryBriefInfoResponse{
+			Id:   g.Category.ID,
+			Name: g.Category.Name,
+		},
+		Brand: &proto.BrandInfoResponse{
+			Id:   g.Brands.ID,
+			Name: g.Brands.Name,
+			Logo: g.Brands.Logo,
+		},
+	}
+}
+
 // 商品接口
 /*
 	考虑这些过滤条件：
@@ -83,41 +114,31 @@ func (s *GoodsServer) GoodsList(ctx context.Context, req *proto.GoodsFilterReque
 		if idx == 1 {
 			model.ToStringLog(g)
 		}
-		goodInfoResp = append(goodInfoResp, &proto.GoodsInfoResponse{
-			Id:              g.ID,
-			CategoryId:      g.CategoryID,
-			Name:            g.Name,
-			GoodsSn:         g.GoodsSn,
-			ClickNum:        g.ClickNum,
-			SoldNum:         g.SoldNum,
-			FavNum:          g.FavNum,
-			MarketPrice:     g.MarketPrice,
-			ShopPrice:       g.ShopPrice,
-			GoodsBrief:      g.GoodsBrief,
-			ShipFree:        g.ShipFree,
-			Images:          g.Images,
-			DescImages:      g.DescImages,
-			GoodsFrontImage: g.GoodsFrontImage,
-			IsNew:           g.IsNew,
-			IsHot:           g.IsHot,
-			OnSale:          g.OnSale,
-			Category: &proto.CategoryBriefInfoResponse{
-				Id:   g.Category.ID,
-				Name: g.Category.Name,
-			},
-			Brand: &proto.BrandInfoResponse{
-				Id:   g.Brands.ID,
-				Name: g.Brands.Name,
-				Logo: g.Brands.Logo,
-			},
-		})
+		goodInfoResp = append(goodInfoResp, GoodModelToResp(g))
 	}
 	resp.Data = goodInfoResp
 	return &resp, nil
 }
 
-// // 用户提交订单有多个商品，需要批量查询商品的信息
-// BatchGetGoods(context.Context, *BatchGoodsIdInfo) (*GoodsListResponse, error)
+// 用户提交订单有多个商品，需要批量查询商品的信息
+func (s *GoodsServer) BatchGetGoods(ctx context.Context, req *proto.BatchGoodsIdInfo) (*proto.GoodsListResponse, error) {
+	var goodList []model.Goods
+	var resp proto.GoodsListResponse
+	result := global.DB.Preload("Category").Preload("Brands").Find(&goodList, req.Id)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	var goodsInfoRespList []*proto.GoodsInfoResponse
+	for _, g := range goodList {
+		goodsInfoRespList = append(goodsInfoRespList, GoodModelToResp(g))
+	}
+
+	resp.Total = int32(result.RowsAffected)
+	resp.Data = goodsInfoRespList
+	return &resp, nil
+}
+
 // CreateGoods(context.Context, *CreateGoodsInfo) (*GoodsInfoResponse, error)
 // DeleteGoods(context.Context, *DeleteGoodsInfo) (*emptypb.Empty, error)
 // UpdateGoods(context.Context, *CreateGoodsInfo) (*emptypb.Empty, error)
