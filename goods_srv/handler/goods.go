@@ -6,6 +6,10 @@ import (
 	"mx-shop-srvs/goods_srv/global"
 	"mx-shop-srvs/goods_srv/model"
 	"mx-shop-srvs/goods_srv/proto"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type GoodsServer struct {
@@ -41,6 +45,24 @@ func GoodModelToResp(g model.Goods) *proto.GoodsInfoResponse {
 			Logo: g.Brands.Logo,
 		},
 	}
+}
+
+func GoodReqToModel(req *proto.CreateGoodsInfo, m *model.Goods) *model.Goods {
+	m.CategoryID = req.CategoryId
+	m.BrandsID = req.BrandId
+	m.Name = req.Name
+	m.GoodsSn = req.GoodsSn
+	m.MarketPrice = req.MarketPrice
+	m.ShopPrice = req.ShopPrice
+	m.GoodsBrief = req.GoodsBrief
+	m.ShipFree = req.ShipFree
+	m.Images = req.Images
+	m.DescImages = req.DescImages
+	m.GoodsFrontImage = req.GoodsFrontImage
+	m.IsNew = req.IsNew
+	m.IsHot = req.IsHot
+	m.OnSale = req.OnSale
+	return m
 }
 
 // 商品接口
@@ -139,7 +161,86 @@ func (s *GoodsServer) BatchGetGoods(ctx context.Context, req *proto.BatchGoodsId
 	return &resp, nil
 }
 
-// CreateGoods(context.Context, *CreateGoodsInfo) (*GoodsInfoResponse, error)
-// DeleteGoods(context.Context, *DeleteGoodsInfo) (*emptypb.Empty, error)
-// UpdateGoods(context.Context, *CreateGoodsInfo) (*emptypb.Empty, error)
-// GetGoodsDetail(context.Context, *GoodInfoRequest) (*GoodsInfoResponse, error)
+func (s *GoodsServer) CreateGoods(ctx context.Context, req *proto.CreateGoodsInfo) (*proto.GoodsInfoResponse, error) {
+	var category model.Category
+	result := global.DB.First(&category, req.CategoryId)
+	if result.RowsAffected == 0 {
+		return nil, status.Errorf(codes.NotFound, "商品关联分类不存在")
+	}
+
+	var brand model.Brands
+	result = global.DB.First(&brand, req.BrandId)
+	if result.RowsAffected == 0 {
+		return nil, status.Errorf(codes.NotFound, "商品关联品牌不存在")
+	}
+
+	var goodInfo model.Goods
+	g := GoodReqToModel(req, &goodInfo)
+	g.Category = category
+	g.Brands = brand
+
+	result = global.DB.Save(&g)
+	resp := GoodModelToResp(*g)
+	if result.Error != nil {
+		return nil, status.Errorf(codes.NotFound, "新建商品失败")
+	}
+
+	return resp, nil
+}
+
+func (s *GoodsServer) DeleteGoods(ctx context.Context, req *proto.DeleteGoodsInfo) (*emptypb.Empty, error) {
+	result := global.DB.First(&model.Goods{}, req.Id)
+	if result.RowsAffected == 0 {
+		return &emptypb.Empty{}, status.Errorf(codes.NotFound, "商品不存在")
+	}
+
+	result = global.DB.Where("id = ?", req.Id).Delete(&model.Goods{})
+	if result.RowsAffected == 0 {
+		return &emptypb.Empty{}, status.Errorf(codes.Internal, "删除失败")
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *GoodsServer) UpdateGoods(ctx context.Context, req *proto.CreateGoodsInfo) (*emptypb.Empty, error) {
+	var category model.Category
+	result := global.DB.First(&category, req.CategoryId)
+	if result.RowsAffected == 0 {
+		return nil, status.Errorf(codes.NotFound, "商品关联分类不存在")
+	}
+
+	var brand model.Brands
+	result = global.DB.First(&brand, req.BrandId)
+	if result.RowsAffected == 0 {
+		return nil, status.Errorf(codes.NotFound, "商品关联品牌不存在")
+	}
+
+	var goodInfo model.Goods
+	result = global.DB.First(&goodInfo, req.Id)
+	if result.RowsAffected == 0 {
+		return &emptypb.Empty{}, status.Errorf(codes.NotFound, "商品不存在")
+	}
+
+	g := GoodReqToModel(req, &goodInfo)
+	g.Category = category
+	g.Brands = brand
+
+	result = global.DB.Save(&g)
+	if result.Error != nil {
+		return &emptypb.Empty{}, status.Errorf(codes.NotFound, "更新商品失败")
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *GoodsServer) GetGoodsDetail(ctx context.Context, req *proto.GoodInfoRequest) (*proto.GoodsInfoResponse, error) {
+
+	var goodInfo model.Goods
+	result := global.DB.Preload("Category").Preload("Brands").Find(&goodInfo, req.Id)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	resp := GoodModelToResp(goodInfo)
+	return resp, nil
+}
