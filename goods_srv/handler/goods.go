@@ -132,10 +132,7 @@ func (s *GoodsServer) GoodsList(ctx context.Context, req *proto.GoodsFilterReque
 	}
 
 	var goodInfoResp []*proto.GoodsInfoResponse
-	for idx, g := range goodsList {
-		if idx == 1 {
-			model.ToStringLog(g)
-		}
+	for _, g := range goodsList {
 		goodInfoResp = append(goodInfoResp, GoodModelToResp(g))
 	}
 	resp.Data = goodInfoResp
