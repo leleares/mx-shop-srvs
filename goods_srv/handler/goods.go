@@ -47,7 +47,7 @@ func GoodModelToResp(g model.Goods) *proto.GoodsInfoResponse {
 	}
 }
 
-func GoodReqToModel(req *proto.CreateGoodsInfo, m *model.Goods) *model.Goods {
+func CreateGoodReqToModel(req *proto.CreateGoodsInfo, m *model.Goods) *model.Goods {
 	m.CategoryID = req.CategoryId
 	m.BrandsID = req.BrandId
 	m.Name = req.Name
@@ -62,6 +62,21 @@ func GoodReqToModel(req *proto.CreateGoodsInfo, m *model.Goods) *model.Goods {
 	m.IsNew = req.IsNew
 	m.IsHot = req.IsHot
 	m.OnSale = req.OnSale
+	return m
+}
+
+func UpdateGoodReqToModel(req *proto.CreateGoodsInfo, m *model.Goods) *model.Goods {
+	m.CategoryID = req.CategoryId
+	m.BrandsID = req.BrandId
+	m.Name = req.Name
+	m.GoodsSn = req.GoodsSn
+	m.MarketPrice = req.MarketPrice
+	m.ShopPrice = req.ShopPrice
+	m.GoodsBrief = req.GoodsBrief
+	m.ShipFree = req.ShipFree
+	m.Images = req.Images
+	m.DescImages = req.DescImages
+	m.GoodsFrontImage = req.GoodsFrontImage
 	return m
 }
 
@@ -172,7 +187,7 @@ func (s *GoodsServer) CreateGoods(ctx context.Context, req *proto.CreateGoodsInf
 	}
 
 	var goodInfo model.Goods
-	g := GoodReqToModel(req, &goodInfo)
+	g := CreateGoodReqToModel(req, &goodInfo)
 	g.Category = category
 	g.Brands = brand
 
@@ -218,7 +233,7 @@ func (s *GoodsServer) UpdateGoods(ctx context.Context, req *proto.CreateGoodsInf
 		return &emptypb.Empty{}, status.Errorf(codes.NotFound, "商品不存在")
 	}
 
-	g := GoodReqToModel(req, &goodInfo)
+	g := UpdateGoodReqToModel(req, &goodInfo)
 	g.Category = category
 	g.Brands = brand
 
