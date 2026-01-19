@@ -26,7 +26,7 @@ func init() {
 }
 
 func main() {
-	TestDeleteGood()
+	TestUpdateGoodStatus()
 	defer conn.Close()
 }
 
@@ -241,6 +241,19 @@ func TestUpdateGoodDetail() {
 	}
 
 	model.ToStringLog(resp)
+}
+
+func TestUpdateGoodStatus() {
+	_, err := goodsClient.UpdateGoodsStatus(context.Background(), &proto.UpdateGoodsStatusRequest{
+		Id:     842,
+		IsNew:  true,
+		IsHot:  true,
+		OnSale: false,
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("更新成功🎉")
 }
 
 func TestCreateGood() {

@@ -11,6 +11,7 @@ service Goods{
     rpc DeleteGoods(DeleteGoodsInfo) returns (google.protobuf.Empty);
     rpc UpdateGoods(CreateGoodsInfo) returns (google.protobuf.Empty);
     rpc GetGoodsDetail(GoodInfoRequest) returns(GoodsInfoResponse);
+    rpc UpdateGoodsStatus(UpdateGoodsStatusRequest) returns (google.protobuf.Empty);
 
     //商品分类
     rpc GetAllCategorysList(google.protobuf.Empty) returns(CategoryListResponse); //获取所有的分类
@@ -193,6 +194,13 @@ message CreateGoodsInfo {
     bool onSale = 18;
     int32 categoryId = 19;
     int32 brandId = 20;
+}
+
+message UpdateGoodsStatusRequest {
+    int32 id = 1;
+    bool isNew = 2;
+    bool isHot = 3;
+    bool onSale = 4;
 }
 
 message GoodsReduceRequest {

@@ -230,6 +230,24 @@ func (s *GoodsServer) UpdateGoods(ctx context.Context, req *proto.CreateGoodsInf
 	return &emptypb.Empty{}, nil
 }
 
+func (s *GoodsServer) UpdateGoodsStatus(ctx context.Context, req *proto.UpdateGoodsStatusRequest) (*emptypb.Empty, error) {
+	var good model.Goods
+	result := global.DB.First(&good, req.Id)
+	if result.RowsAffected == 0 {
+		return &emptypb.Empty{}, result.Error
+	}
+
+	good.IsHot = req.IsHot
+	good.IsNew = req.IsNew
+	good.OnSale = req.OnSale
+
+	result = global.DB.Save(&good)
+	if result.RowsAffected == 0 {
+		return &emptypb.Empty{}, result.Error
+	}
+	return &emptypb.Empty{}, nil
+}
+
 func (s *GoodsServer) GetGoodsDetail(ctx context.Context, req *proto.GoodInfoRequest) (*proto.GoodsInfoResponse, error) {
 
 	var goodInfo model.Goods
