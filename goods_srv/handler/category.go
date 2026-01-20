@@ -114,7 +114,7 @@ func (s *GoodsServer) CreateCategory(ctx context.Context, req *proto.CategoryInf
 	if req.Level != 1 {
 		cMap["parent_category_id"] = req.ParentCategory
 	}
-	result := global.DB.Model(&model.Category{}).Create(cMap)
+	result := global.DB.Model(&category).Create(cMap)
 	if result.RowsAffected == 0 {
 		return nil, result.Error
 	}
@@ -142,7 +142,7 @@ func (s *GoodsServer) UpdateCategory(ctx context.Context, req *proto.CategoryInf
 	cMap["name"] = req.Name
 	cMap["level"] = req.Level
 	cMap["is_tab"] = req.IsTab
-	if req.Level != 1 {
+	if req.Level != 1 && req.Level != 0 {
 		cMap["parent_category_id"] = req.ParentCategory
 	}
 
