@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"context"
+	"mx-shop-srvs/inventory_srv/global"
+	"mx-shop-srvs/inventory_srv/model"
 	"mx-shop-srvs/inventory_srv/proto"
 
+	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
 )
 
@@ -27,3 +31,42 @@ func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 		return db.Offset(offset).Limit(pageSize)
 	}
 }
+
+// 设置库存&更新库存
+func (s *InventoryServer) SetInv(ctx context.Context, req *proto.GoodInvInfo) (*emptypb.Empty, error) {
+	var inventory model.Inventory
+	result := global.DB.Where("good = ?", req.GoodId).Find(&inventory)
+	if result.Error != nil {
+		return &emptypb.Empty{}, result.Error
+	}
+	if result.RowsAffected == 0 {
+		// 执行新增
+		var scopeInventory model.Inventory
+		scopeInventory.Good = req.GoodId
+		scopeInventory.Stock = req.Num
+		result := global.DB.Create(&scopeInventory)
+		if result.Error != nil {
+			return &emptypb.Empty{}, result.Error
+		}
+	} else {
+		// 执行更新
+		inventory.Stock = req.Num
+		result := global.DB.Save(&inventory)
+		if result.Error != nil {
+			return &emptypb.Empty{}, result.Error
+		}
+	}
+	return &emptypb.Empty{}, nil
+}
+
+// func (s *InventoryServer) InvDetail(ctx context.Context, req *proto.GoodInvInfo) (*proto.GoodInvInfo, error) {
+
+// }
+
+// func (s *InventoryServer) Sell(ctx context.Context, req *proto.SellInfo) (*proto.MsgTips, error) {
+
+// }
+
+// func (s *InventoryServer) Reback(ctx context.Context, req *proto.SellInfo) (*emptypb.Empty, error) {
+
+// }
