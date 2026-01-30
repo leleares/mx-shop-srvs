@@ -1,0 +1,6 @@
+nacos:
+  host: "127.0.0.1"
+  port: 8848
+  namespace: '10ef4b97-0b7c-48e6-9997-768e71dd210a'
+  group: 'prod'
+  dataid: 'inventory-srv.json'
