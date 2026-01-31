@@ -4,6 +4,7 @@ import (
 	"context"
 	"mx-shop-srvs/inventory_srv/model"
 	"mx-shop-srvs/inventory_srv/proto"
+	"sync"
 
 	"google.golang.org/grpc"
 )
@@ -24,6 +25,15 @@ func init() {
 }
 
 func main() {
+	var wg sync.WaitGroup
+
+	wg.Add(50)
+	for i := 0; i < 50; i++ {
+		// go TestSell(&wg)
+		go TestRollback(&wg)
+	}
+	wg.Wait()
+
 	conn.Close()
 }
 
@@ -47,11 +57,11 @@ func TestInvDetail() {
 	model.ToStringLog(resp)
 }
 
-func TestSell() {
+func TestSell(wg *sync.WaitGroup) {
+	defer wg.Done()
 	resp, err := inventoryClient.Sell(context.Background(), &proto.SellInfo{
 		GoodsInfo: []*proto.GoodInvInfo{
-			&proto.GoodInvInfo{GoodId: 430, Num: 1},
-			&proto.GoodInvInfo{GoodId: 431, Num: 2},
+			&proto.GoodInvInfo{GoodId: 421, Num: 1},
 		},
 	})
 	if err != nil {
@@ -60,11 +70,11 @@ func TestSell() {
 	model.ToStringLog(resp)
 }
 
-func TestRollback() {
+func TestRollback(wg *sync.WaitGroup) {
+	defer wg.Done()
 	resp, err := inventoryClient.Reback(context.Background(), &proto.SellInfo{
 		GoodsInfo: []*proto.GoodInvInfo{
-			&proto.GoodInvInfo{GoodId: 431, Num: 2},
-			&proto.GoodInvInfo{GoodId: 430, Num: 1},
+			&proto.GoodInvInfo{GoodId: 421, Num: 1},
 		},
 	})
 	if err != nil {
