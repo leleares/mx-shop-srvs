@@ -39,22 +39,11 @@ func (s *InventoryServer) SetInv(ctx context.Context, req *proto.GoodInvInfo) (*
 	if result.Error != nil {
 		return &emptypb.Empty{}, result.Error
 	}
-	if result.RowsAffected == 0 {
-		// 执行新增
-		var scopeInventory model.Inventory
-		scopeInventory.Good = req.GoodId
-		scopeInventory.Stock = req.Num
-		result := global.DB.Create(&scopeInventory)
-		if result.Error != nil {
-			return &emptypb.Empty{}, result.Error
-		}
-	} else {
-		// 执行更新
-		inventory.Stock = req.Num
-		result := global.DB.Save(&inventory)
-		if result.Error != nil {
-			return &emptypb.Empty{}, result.Error
-		}
+	inventory.Good = req.GoodId
+	inventory.Stock = req.Num
+	result = global.DB.Save(&inventory) // Save兼容Create和Update操作
+	if result.Error != nil {
+		return &emptypb.Empty{}, result.Error
 	}
 	return &emptypb.Empty{}, nil
 }

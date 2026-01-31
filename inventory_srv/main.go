@@ -22,10 +22,9 @@ import (
 )
 
 func main() {
-	s := zap.S()
 	// flag处理的参数可在运行可执行文件时注入
 	IP := flag.String("ip", "0.0.0.0", "ip地址")
-	Port := flag.Int("port", 0, "端口号")
+	Port := flag.Int("port", 50052, "端口号")
 	var localHost string = "127.0.0.1"
 
 	// initialize
@@ -33,6 +32,7 @@ func main() {
 	initialize.InitConfig()
 	initialize.InitDB()
 
+	s := zap.S()
 	flag.Parse()
 	if *Port == 0 {
 		port, err := utils.GetFreeAddr()

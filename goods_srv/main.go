@@ -25,10 +25,10 @@ func main() {
 
 	// initialize
 	initialize.InitLogger()
-	s := zap.S()
 	initialize.InitConfig()
 	initialize.InitDB()
 
+	s := zap.S()
 	flag.Parse()
 	if *Port == 0 {
 		port, err := utils.GetFreeAddr()
