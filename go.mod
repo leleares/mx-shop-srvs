@@ -4,9 +4,11 @@ go 1.25.3
 
 require (
 	github.com/anaskhan96/go-password-encoder v0.0.0-20201010210601-c765b799fd72
+	github.com/go-redsync/redsync/v4 v4.15.0
 	github.com/golang/protobuf v1.5.4
 	github.com/hashicorp/consul/api v1.33.0
 	github.com/nacos-group/nacos-sdk-go v1.1.6
+	github.com/redis/go-redis/v9 v9.17.2
 	github.com/satori/go.uuid v1.2.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
@@ -18,6 +20,8 @@ require (
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.18 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
@@ -51,6 +55,7 @@ require (
 	golang.org/x/sync v0.18.0 // indirect
 	gopkg.in/ini.v1 v1.42.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (

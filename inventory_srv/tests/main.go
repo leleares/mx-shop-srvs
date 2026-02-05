@@ -29,8 +29,8 @@ func main() {
 
 	wg.Add(50)
 	for i := 0; i < 50; i++ {
-		// go TestSell(&wg)
-		go TestRollback(&wg)
+		go TestSell(&wg)
+		// go TestRollback(&wg)
 	}
 	wg.Wait()
 

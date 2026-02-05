@@ -74,20 +74,44 @@ func (s *InventoryServer) InvDetail(ctx context.Context, req *proto.GoodInvInfo)
 var m sync.Mutex // 应放在全局位置，保证所有请求协程共享一把锁
 
 func (s *InventoryServer) Sell(ctx context.Context, req *proto.SellInfo) (*proto.MsgTips, error) {
+	// pool := goredis.NewPool(global.RedisClient)
+
+	// rs := redsync.New(pool)
+
 	tx := global.DB.Begin()
 	for _, goodInfo := range req.GoodsInfo {
 		var inventory model.Inventory
+		// redis锁
+		// mutexname := fmt.Sprintf("good_inv_%d", goodInfo.GoodId)
+		// mutex := rs.NewMutex(mutexname)
+		// if err := mutex.Lock(); err != nil {
+		// 	return nil, status.Errorf(codes.Internal, "获取redis分布式锁异常")
+		// }
+		// defer mutex.Unlock()
+
+		// 悲观锁，本质上利用MySql的行锁能力
 		result := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("good = ?", goodInfo.GoodId).Find(&inventory)
+		// result := tx.Where("good = ?", goodInfo.GoodId).Find(&inventory)
 		if result.RowsAffected == 0 {
 			tx.Rollback()
-			return nil, status.Errorf(codes.NotFound, fmt.Sprintf("找不到%s商品库存信息", goodInfo.GoodId))
+			return nil, status.Errorf(codes.NotFound, fmt.Sprintf("找不到%d商品库存信息", goodInfo.GoodId))
 		}
 		if inventory.Stock < goodInfo.Num {
 			tx.Rollback()
-			return nil, status.Errorf(codes.InvalidArgument, fmt.Sprintf("%s商品库存信息不足", goodInfo.GoodId))
+			return nil, status.Errorf(codes.InvalidArgument, fmt.Sprintf("%d商品库存信息不足", goodInfo.GoodId))
 		}
 		inventory.Stock -= goodInfo.Num
 		tx.Save(&inventory)
+		// if ok, err := mutex.Unlock(); !ok || err != nil {
+		// 	return nil, status.Errorf(codes.Internal, "释放redis分布式锁异常")
+		// }
+
+		// 乐观锁写法
+		// if result = global.DB.Model(&model.Inventory{}).Where("good = ? and version = ?", inventory.Good, inventory.Version).Select("Stock", "Version").Updates(model.Inventory{Stock: inventory.Stock, Version: inventory.Version + 1}); result.RowsAffected != 0 {
+		// 	break // 逻辑执行完毕，退出循环
+		// } else {
+		// 	zap.S().Error("更新库存信息失败") // 继续循环，重新查询然后再次执行逻辑
+		// }
 	}
 	tx.Commit() // Commit 后才真正执行更新数据库的操作
 	return &proto.MsgTips{
