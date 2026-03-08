@@ -1,0 +1,6 @@
+nacos:
+  host: "127.0.0.1"
+  port: 8848
+  namespace: '0117177a-4e79-4752-aae6-a878b1625280'
+  group: 'dev'
+  dataid: 'order-srv.json'
