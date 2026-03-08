@@ -116,7 +116,80 @@ func (s *OrderServer) DeleteCartItem(ctx context.Context, req *proto.CartItemReq
 }
 
 // 订单
-// CreateOrder(context.Context, *OrderRequest) (*OrderInfoResponse, error)
-// OrderList(context.Context, *OrderFilterRequest) (*OrderListResponse, error)
-// OrderDetail(context.Context, *OrderRequest) (*OrderInfoDetailResponse, error)
-// UpdateOrderStatus(context.Context, *OrderStatus) (*emptypb.Empty, error)
+// func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) (*proto.OrderInfoResponse, error) {
+
+// }
+
+func (s *OrderServer) OrderList(ctx context.Context, req *proto.OrderFilterRequest) (*proto.OrderListResponse, error) {
+	var orderList []model.OrderInfo
+	var resp proto.OrderListResponse
+	var total int64
+	global.DB.Where(&model.OrderInfo{User: req.UserId}).Count(&total) // 注意，当req.UserId为空时，会自动去除掉where条件
+	resp.Total = int32(total)
+	result := global.DB.Where(&model.OrderInfo{User: req.UserId}).Scopes(Paginate(int(req.Pages), int(req.PagePerNums))).Find(&orderList)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	for _, order := range orderList {
+		resp.Data = append(resp.Data, &proto.OrderInfoResponse{
+			Id:      order.ID,
+			UserId:  order.User,
+			OrderSn: order.OrderSn,
+			PayType: order.PayType,
+			Status:  order.Status,
+			Post:    order.Post,
+			Address: order.Address,
+			Name:    order.SignerName,
+			Mobile:  order.SingerMobile,
+			Total:   order.OrderMount,
+			AddTime: order.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	return &resp, nil
+}
+
+func (s *OrderServer) OrderDetail(ctx context.Context, req *proto.OrderRequest) (*proto.OrderInfoDetailResponse, error) {
+	var order model.OrderInfo
+
+	// 注意这里要判断该订单是否是当前用户的
+	result := global.DB.Where(&model.OrderInfo{BaseModel: model.BaseModel{ID: req.Id}, User: req.UserId}).First(&order)
+	if result.RowsAffected == 0 {
+		return nil, status.Errorf(codes.NotFound, "未找到订单信息")
+	}
+
+	var resp proto.OrderInfoDetailResponse
+	resp.OrderInfo = &proto.OrderInfoResponse{
+		Id:      order.ID,
+		UserId:  order.User,
+		OrderSn: order.OrderSn,
+		PayType: order.PayType,
+		Status:  order.Status,
+		Post:    order.Post,
+		Address: order.Address,
+		Name:    order.SignerName,
+		Mobile:  order.SingerMobile,
+		Total:   order.OrderMount,
+		AddTime: order.CreatedAt.Format("2006-01-02 15:04:05"),
+	}
+
+	var orderGoods []model.OrderGoods
+	result = global.DB.Where("order = ?", order.ID).Find(&orderGoods)
+	for _, orderGood := range orderGoods {
+		resp.Goods = append(resp.Goods, &proto.OrderItemResponse{
+			Id:         orderGood.ID,
+			OrderId:    orderGood.Order,
+			GoodsId:    orderGood.Goods,
+			GoodsName:  orderGood.GoodsName,
+			GoodsImage: orderGood.GoodsImage,
+			GoodsPrice: orderGood.GoodsPrice,
+			Nums:       orderGood.Nums,
+		})
+	}
+
+	return &resp, nil
+}
+
+// func (s *OrderServer) UpdateOrderStatus(ctx context.Context, req *proto.OrderStatus) (*emptypb.Empty, error) {
+// }
