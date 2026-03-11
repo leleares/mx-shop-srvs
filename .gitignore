@@ -1,2 +1,4 @@
 # nacos runtime logs (all services)
 **/tmp/nacos
+# macos finder cache file
+.DS_Store
