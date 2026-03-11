@@ -32,6 +32,8 @@ func main() {
 	initialize.InitConfig()
 	initialize.InitDB()
 	initialize.InitRedisClient()
+	initialize.InitSrv()
+
 	s := zap.S()
 	flag.Parse()
 	if *Port == 0 {
