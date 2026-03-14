@@ -232,7 +232,7 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 	}
 
 	// 更新购物车
-	result = tx.Where(&model.ShoppingCart{User: req.Id, Checked: true}).Delete(model.ShoppingCart{})
+	result = tx.Where(&model.ShoppingCart{User: req.Id, Checked: true}).Delete(&model.ShoppingCart{})
 	if result.Error != nil {
 		tx.Rollback()
 		return nil, status.Errorf(codes.Internal, "更新购物车状态失败")
@@ -247,9 +247,12 @@ func (s *OrderServer) OrderList(ctx context.Context, req *proto.OrderFilterReque
 	var orderList []model.OrderInfo
 	var resp proto.OrderListResponse
 	var total int64
-	global.DB.Where(&model.OrderInfo{User: req.UserId}).Count(&total) // 注意，当req.UserId为空时，会自动去除掉where条件
+	result := global.DB.Model(&model.OrderInfo{}).Where(&model.OrderInfo{User: req.UserId}).Count(&total) // 注意，当req.UserId为空时，会自动去除掉where条件
+	if result.Error != nil {
+		return nil, result.Error
+	}
 	resp.Total = int32(total)
-	result := global.DB.Where(&model.OrderInfo{User: req.UserId}).Scopes(Paginate(int(req.Pages), int(req.PagePerNums))).Find(&orderList)
+	result = global.DB.Where(&model.OrderInfo{User: req.UserId}).Scopes(Paginate(int(req.Pages), int(req.PagePerNums))).Find(&orderList)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -314,5 +317,9 @@ func (s *OrderServer) OrderDetail(ctx context.Context, req *proto.OrderRequest) 
 	return &resp, nil
 }
 
-// func (s *OrderServer) UpdateOrderStatus(ctx context.Context, req *proto.OrderStatus) (*emptypb.Empty, error) {
-// }
+func (s *OrderServer) UpdateOrderStatus(ctx context.Context, req *proto.OrderStatus) (*emptypb.Empty, error) {
+	if result := global.DB.Model(&model.OrderInfo{}).Where("order_sn = ?", req.OrderSn).Update("status", req.Status); result.RowsAffected == 0 {
+		return &emptypb.Empty{}, status.Errorf(codes.NotFound, "未找到订单信息")
+	}
+	return &emptypb.Empty{}, nil
+}

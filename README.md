@@ -52,3 +52,10 @@ for k,v := range slice {
     // v其实是slice中元素的副本，也就是v其实是拷贝了一份原始数据出来
 }
 ```
+
+### gorm中的Where
+```go
+global.DB.Where(&model.OrderInfo{User: req.UserId}).Count(&total) // error，不知道要操作哪个表
+global.DB.Where(&model.OrderInfo{User: req.UserId}).Find(&orderList) // right，可以从Find条件中推断出是哪个表
+// 这意味着，Where 仅创建查询条件，并不关心表模型。
+```

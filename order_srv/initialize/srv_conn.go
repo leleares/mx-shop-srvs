@@ -5,6 +5,8 @@ import (
 	"mx-shop-srvs/order_srv/global"
 	"mx-shop-srvs/order_srv/proto"
 
+	_ "github.com/mbobakov/grpc-consul-resolver" // It's important
+
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
