@@ -104,7 +104,7 @@ func (s *OrderServer) CreateCartItem(ctx context.Context, req *proto.CartItemReq
 func (s *OrderServer) UpdateCartItem(ctx context.Context, req *proto.CartItemRequest) (*emptypb.Empty, error) {
 	var cartItem model.ShoppingCart
 
-	result := global.DB.Where("id = ?", req.Id).First(&cartItem)
+	result := global.DB.Where("id = ? and user = ?", req.Id, req.UserId).First(&cartItem)
 	if result.RowsAffected == 0 {
 		return nil, status.Errorf(codes.NotFound, "该商品不存在")
 	}
@@ -120,7 +120,7 @@ func (s *OrderServer) UpdateCartItem(ctx context.Context, req *proto.CartItemReq
 }
 
 func (s *OrderServer) DeleteCartItem(ctx context.Context, req *proto.CartItemRequest) (*emptypb.Empty, error) {
-	result := global.DB.Where("id = ?", req.Id).Delete(&model.ShoppingCart{})
+	result := global.DB.Where("id = ? and user = ?", req.Id, req.UserId).Delete(&model.ShoppingCart{})
 	if result.RowsAffected == 0 {
 		return nil, status.Errorf(codes.NotFound, "商品不存在，删除商品失败")
 	}
@@ -177,6 +177,7 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 			GoodsName:  good.Name,
 			GoodsImage: good.GoodsFrontImage,
 			Nums:       amount,
+			GoodsPrice: good.ShopPrice,
 		})
 	}
 
@@ -301,7 +302,8 @@ func (s *OrderServer) OrderDetail(ctx context.Context, req *proto.OrderRequest) 
 	}
 
 	var orderGoods []model.OrderGoods
-	result = global.DB.Where("order = ?", order.ID).Find(&orderGoods)
+	result = global.DB.Where("`order` = ?", order.ID).Find(&orderGoods) // 注意order是mysql里的关键词，因为：order by😓，因此order要加上反引号
+	model.ToStringLog(result)
 	for _, orderGood := range orderGoods {
 		resp.Goods = append(resp.Goods, &proto.OrderItemResponse{
 			Id:         orderGood.ID,

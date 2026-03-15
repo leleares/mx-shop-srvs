@@ -25,7 +25,8 @@ func init() {
 }
 
 func main() {
-	TestOrderList()
+	// TestOrderList()
+	TestCreateCartItem()
 }
 
 func TestCartItemList() {
