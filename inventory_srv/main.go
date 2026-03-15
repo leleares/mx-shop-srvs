@@ -41,8 +41,8 @@ func main() {
 			*Port = port
 		}
 	}
-	s.Infof("ip", *IP)
-	s.Infof("port", *Port)
+	s.Infof("ip=%s", *IP)
+	s.Infof("port=%d", *Port)
 
 	server := grpc.NewServer()
 	proto.RegisterInventoryServer(server, &handler.InventoryServer{})
