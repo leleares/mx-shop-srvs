@@ -204,7 +204,7 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 		User:    req.UserId,
 		OrderSn: GenOrderSn(req.UserId), // 订单号
 		// PayType: , // 支付方式
-		// Status: , // 订单状态
+		Status: string(model.TradeStatusWaitBuyerPay), // 订单状态
 		// TradeNo: , // 交易号，就是支付宝的订单号，用于查账
 		OrderMount: totalAmount, // 总金额
 		// PayTime: , // 支付时间
