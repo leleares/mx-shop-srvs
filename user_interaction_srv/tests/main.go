@@ -23,6 +23,7 @@ func init() {
 	}
 
 	addressClient = proto.NewAddressClient(conn)
+	messageClient = proto.NewMessageClient(conn)
 }
 
 func main() {
@@ -30,6 +31,8 @@ func main() {
 	// TestUpdateAddress()
 	// TestAddressList()
 	// TestDeleteAddress()
+	// TestCreateMessage()
+	TestMessageList()
 }
 
 func TestCreateAddress() {
@@ -84,6 +87,34 @@ func TestAddressList() {
 func TestDeleteAddress() {
 	resp, err := addressClient.DeleteAddress(context.Background(), &proto.AddressRequest{
 		Id:     1,
+		UserId: 10,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestCreateMessage() {
+	resp, err := messageClient.CreateMessage(context.Background(), &proto.MessageRequest{
+		UserId:      10,
+		MessageType: 1,
+		Subject:     "主题就是留言",
+		Message:     "这是留言balabala",
+		File:        "https://piccdn2.umiwi.com/fe-oss/default/MTc3Mzg5MTAyMDg4.png",
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestMessageList() {
+	resp, err := messageClient.MessageList(context.Background(), &proto.MessageRequest{
 		UserId: 10,
 	})
 
