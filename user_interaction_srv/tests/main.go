@@ -24,6 +24,7 @@ func init() {
 
 	addressClient = proto.NewAddressClient(conn)
 	messageClient = proto.NewMessageClient(conn)
+	userFavClient = proto.NewUserFavClient(conn)
 }
 
 func main() {
@@ -32,7 +33,11 @@ func main() {
 	// TestAddressList()
 	// TestDeleteAddress()
 	// TestCreateMessage()
-	TestMessageList()
+	// TestMessageList()
+	// TestAddUserFav()
+	// TestGetUserFavDetail()
+	// TestGetFavList()
+	TestDelUserFav()
 }
 
 func TestCreateAddress() {
@@ -116,6 +121,57 @@ func TestCreateMessage() {
 func TestMessageList() {
 	resp, err := messageClient.MessageList(context.Background(), &proto.MessageRequest{
 		UserId: 10,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestAddUserFav() {
+	resp, err := userFavClient.AddUserFav(context.Background(), &proto.UserFavRequest{
+		UserId:  10,
+		GoodsId: 421,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestGetUserFavDetail() {
+	resp, err := userFavClient.GetUserFavDetail(context.Background(), &proto.UserFavRequest{
+		UserId:  10,
+		GoodsId: 421,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestGetFavList() {
+	resp, err := userFavClient.GetFavList(context.Background(), &proto.UserFavRequest{
+		UserId: 10,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	model.ToStringLog(resp)
+}
+
+func TestDelUserFav() {
+	resp, err := userFavClient.DeleteUserFav(context.Background(), &proto.UserFavRequest{
+		UserId:  10,
+		GoodsId: 421,
 	})
 
 	if err != nil {

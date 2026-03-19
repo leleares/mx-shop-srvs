@@ -59,3 +59,9 @@ global.DB.Where(&model.OrderInfo{User: req.UserId}).Count(&total) // error，不
 global.DB.Where(&model.OrderInfo{User: req.UserId}).Find(&orderList) // right，可以从Find条件中推断出是哪个表
 // 这意味着，Where 仅创建查询条件，并不关心表模型。
 ```
+
+### Unscoped
+```js
+// 忽略软删除，之前查询某个纪录，如果那条记录被软删除了，则查不到。现在可以查到。
+// 之前删除其实是更新了delete_at和is_delete，现在直接物理删除。
+```
