@@ -34,7 +34,7 @@ func (s *UserFavServer) GetFavList(ctx context.Context, req *proto.UserFavReques
 }
 
 func (s *UserFavServer) AddUserFav(ctx context.Context, req *proto.UserFavRequest) (*emptypb.Empty, error) {
-	if result := global.DB.Model(&model.UserFav{}).Where("user = ? and goods = ?", req.UserId, req.GoodsId); result.RowsAffected == 1 {
+	if result := global.DB.Model(&model.UserFav{}).Where("user = ? and goods = ?", req.UserId, req.GoodsId).Find(&model.UserFav{}); result.RowsAffected == 1 {
 		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "此收藏记录已经存在")
 	}
 	userFav := model.UserFav{

@@ -1,6 +1,6 @@
 nacos:
   host: "127.0.0.1"
   port: 8848
-  namespace: '2bcf5647-8077-4cad-80ea-d4a46a494330' # '52e88167-28ae-4b99-96d2-ee76535069a7'
+  namespace: '52e88167-28ae-4b99-96d2-ee76535069a7' # '2bcf5647-8077-4cad-80ea-d4a46a494330' # 
   group: 'dev'
   dataid: 'user-interaction-srv.json'
