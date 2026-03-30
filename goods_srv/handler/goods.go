@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"mx-shop-srvs/goods_srv/global"
 	"mx-shop-srvs/goods_srv/model"
 	"mx-shop-srvs/goods_srv/proto"
@@ -98,60 +101,184 @@ func UpdateGoodReqToModel(req *proto.CreateGoodsInfo, m *model.Goods) *model.Goo
 	(select id from category where parent_category_id = 130358)) // 查出的是二级分类的id
 */
 func (s *GoodsServer) GoodsList(ctx context.Context, req *proto.GoodsFilterRequest) (*proto.GoodsListResponse, error) {
-	var goodsList []model.Goods
-	var resp proto.GoodsListResponse
-	localDB := global.DB.Model(&model.Goods{})
+	goodsListResponse := &proto.GoodsListResponse{}
+	mustClauses := make([]map[string]interface{}, 0)
+	filterClauses := make([]map[string]interface{}, 0)
+
 	if req.KeyWords != "" {
-		localDB = localDB.Where("name LIKE ?", "%"+req.KeyWords+"%")
+		mustClauses = append(mustClauses, map[string]interface{}{
+			"multi_match": map[string]interface{}{
+				"query":  req.KeyWords,
+				"fields": []string{"name", "goods_brief"},
+			},
+		})
 	}
-	if req.IsNew == true {
-		localDB = localDB.Where("is_new = 1")
+	if req.IsHot {
+		filterClauses = append(filterClauses, map[string]interface{}{
+			"term": map[string]interface{}{
+				"is_hot": req.IsHot,
+			},
+		})
 	}
-	if req.IsHot == true {
-		localDB = localDB.Where("is_hot = 1")
+	if req.IsNew {
+		filterClauses = append(filterClauses, map[string]interface{}{
+			"term": map[string]interface{}{
+				"is_new": req.IsNew,
+			},
+		})
 	}
 	if req.PriceMin > 0 {
-		localDB = localDB.Where("shop_price >= ?", req.PriceMin)
+		filterClauses = append(filterClauses, map[string]interface{}{
+			"range": map[string]interface{}{
+				"shop_price": map[string]interface{}{
+					"gte": req.PriceMin,
+				},
+			},
+		})
 	}
 	if req.PriceMax > 0 {
-		localDB = localDB.Where("shop_price <= ?", req.PriceMax)
+		filterClauses = append(filterClauses, map[string]interface{}{
+			"range": map[string]interface{}{
+				"shop_price": map[string]interface{}{
+					"lte": req.PriceMax,
+				},
+			},
+		})
 	}
 	if req.Brand > 0 {
-		localDB = localDB.Where("brands_id = ?", req.Brand)
+		filterClauses = append(filterClauses, map[string]interface{}{
+			"term": map[string]interface{}{
+				"brands_id": req.Brand,
+			},
+		})
 	}
 
-	var subSqlQuery string
 	if req.TopCategory > 0 {
 		var category model.Category
 		if result := global.DB.First(&category, req.TopCategory); result.RowsAffected == 0 {
-			return nil, result.Error
+			return nil, status.Errorf(codes.NotFound, "商品分类不存在")
 		}
 
-		if category.Level == 1 {
-			subSqlQuery = fmt.Sprintf("(select id from category where parent_category_id in (select id from category where parent_category_id = %d))", req.TopCategory)
-		} else if category.Level == 2 {
-			subSqlQuery = fmt.Sprintf("(select id from category where parent_category_id = %d)", req.TopCategory)
-		} else {
-			subSqlQuery = fmt.Sprintf("select id from category where id = %d", req.TopCategory)
+		var subQuery string
+		switch category.Level {
+		case 1:
+			subQuery = fmt.Sprintf("select id from category where parent_category_id in (select id from category where parent_category_id=%d)", req.TopCategory)
+		case 2:
+			subQuery = fmt.Sprintf("select id from category where parent_category_id=%d", req.TopCategory)
+		case 3:
+			subQuery = fmt.Sprintf("select id from category where id=%d", req.TopCategory)
 		}
-		localDB = localDB.Where(fmt.Sprintf("category_id in (%s)", subSqlQuery))
+
+		type result struct {
+			ID int32
+		}
+		var results []result
+		global.DB.Model(model.Category{}).Raw(subQuery).Scan(&results)
+
+		categoryIDs := make([]int32, 0, len(results))
+		for _, item := range results {
+			categoryIDs = append(categoryIDs, item.ID)
+		}
+
+		if len(categoryIDs) == 0 {
+			return goodsListResponse, nil
+		}
+
+		filterClauses = append(filterClauses, map[string]interface{}{
+			"terms": map[string]interface{}{
+				"category_id": categoryIDs,
+			},
+		})
 	}
 
-	var count int64
-	localDB.Model(&model.Goods{}).Count(&count)
-	resp.Total = int32(count)
+	if req.Pages == 0 {
+		req.Pages = 1
+	}
+	switch {
+	case req.PagePerNums > 100:
+		req.PagePerNums = 100
+	case req.PagePerNums <= 0:
+		req.PagePerNums = 10
+	}
 
-	result := localDB.Preload("Category").Preload("Brands").Scopes(Paginate(int(req.Pages), int(req.PagePerNums))).Find(&goodsList)
+	boolQuery := map[string]interface{}{}
+	if len(mustClauses) > 0 {
+		boolQuery["must"] = mustClauses
+	}
+	if len(filterClauses) > 0 {
+		boolQuery["filter"] = filterClauses
+	}
+
+	searchBody := map[string]interface{}{
+		"query": map[string]interface{}{
+			"bool": boolQuery,
+		},
+		"from":    (req.Pages - 1) * req.PagePerNums,
+		"size":    req.PagePerNums,
+		"_source": []string{"id"},
+	}
+
+	body, err := json.Marshal(searchBody)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := global.ES.Search(
+		global.ES.Search.WithContext(ctx),
+		global.ES.Search.WithIndex(model.EsGoods{}.GetIndexName()),
+		global.ES.Search.WithBody(bytes.NewReader(body)),
+		global.ES.Search.WithTrackTotalHits(true),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		respBody, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("es search failed: %s", string(respBody))
+	}
+
+	var searchResp struct {
+		Hits struct {
+			Total struct {
+				Value int64 `json:"value"`
+			} `json:"total"`
+			Hits []struct {
+				Source model.EsGoods `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+	if err = json.NewDecoder(res.Body).Decode(&searchResp); err != nil {
+		return nil, err
+	}
+
+	goodsIDs := make([]int32, 0, len(searchResp.Hits.Hits))
+	goodsListResponse.Total = int32(searchResp.Hits.Total.Value)
+	for _, hit := range searchResp.Hits.Hits {
+		goodsIDs = append(goodsIDs, hit.Source.ID)
+	}
+	if len(goodsIDs) == 0 {
+		return goodsListResponse, nil
+	}
+
+	var goodsList []model.Goods
+	result := global.DB.Where("id IN ?", goodsIDs).Preload("Category").Preload("Brands").Find(&goodsList)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
-	var goodInfoResp []*proto.GoodsInfoResponse
-	for _, g := range goodsList {
-		goodInfoResp = append(goodInfoResp, GoodModelToResp(g))
+	goodsMap := make(map[int32]model.Goods, len(goodsList))
+	for _, goods := range goodsList {
+		goodsMap[goods.ID] = goods
 	}
-	resp.Data = goodInfoResp
-	return &resp, nil
+	for _, goodsID := range goodsIDs {
+		if goods, ok := goodsMap[goodsID]; ok {
+			goodsListResponse.Data = append(goodsListResponse.Data, GoodModelToResp(goods))
+		}
+	}
+
+	return goodsListResponse, nil
 }
 
 // 用户提交订单有多个商品，需要批量查询商品的信息
@@ -191,23 +318,31 @@ func (s *GoodsServer) CreateGoods(ctx context.Context, req *proto.CreateGoodsInf
 	g.Category = category
 	g.Brands = brand
 
-	result = global.DB.Save(&g)
-	resp := GoodModelToResp(*g)
+	tx := global.DB.Begin()
+	result = tx.Save(&g) // 注意这里要判断是否执行成功了保存操作，如果没有那就回滚，否则将导致AfterCreate钩子执行从而导致数据不一致问题
 	if result.Error != nil {
+		tx.Rollback()
 		return nil, status.Errorf(codes.NotFound, "新建商品失败")
 	}
-
+	if err := tx.Commit().Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "提交商品事务失败")
+	}
+	resp := GoodModelToResp(*g)
 	return resp, nil
 }
 
 func (s *GoodsServer) DeleteGoods(ctx context.Context, req *proto.DeleteGoodsInfo) (*emptypb.Empty, error) {
-	result := global.DB.First(&model.Goods{}, req.Id)
+	var goods model.Goods
+	result := global.DB.First(&goods, req.Id)
 	if result.RowsAffected == 0 {
 		return &emptypb.Empty{}, status.Errorf(codes.NotFound, "商品不存在")
 	}
+	if result.Error != nil {
+		return &emptypb.Empty{}, result.Error
+	}
 
-	result = global.DB.Where("id = ?", req.Id).Delete(&model.Goods{})
-	if result.RowsAffected == 0 {
+	result = global.DB.Delete(&goods)
+	if result.Error != nil {
 		return &emptypb.Empty{}, status.Errorf(codes.Internal, "删除失败")
 	}
 

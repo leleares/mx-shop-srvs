@@ -27,6 +27,7 @@ func main() {
 	initialize.InitLogger()
 	initialize.InitConfig()
 	initialize.InitDB()
+	initialize.InitEs()
 
 	s := zap.S()
 	flag.Parse()

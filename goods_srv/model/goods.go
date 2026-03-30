@@ -1,5 +1,16 @@
 package model
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"mx-shop-srvs/goods_srv/global"
+	"strconv"
+
+	"gorm.io/gorm"
+)
+
 type Category struct {
 	BaseModel
 	Name             string      `gorm:"type:varchar(20);not null" json:"name"`
@@ -57,4 +68,80 @@ type Goods struct {
 	Images          GormList `gorm:"type:varchar(1000);not null"`
 	DescImages      GormList `gorm:"type:varchar(1000);not null"`
 	GoodsFrontImage string   `gorm:"type:varchar(200);not null"`
+}
+
+func (g *Goods) toEsModel() EsGoods {
+	return EsGoods{
+		ID:          g.ID,
+		CategoryID:  g.CategoryID,
+		BrandsID:    g.BrandsID,
+		OnSale:      g.OnSale,
+		ShipFree:    g.ShipFree,
+		IsNew:       g.IsNew,
+		IsHot:       g.IsHot,
+		Name:        g.Name,
+		ClickNum:    g.ClickNum,
+		SoldNum:     g.SoldNum,
+		FavNum:      g.FavNum,
+		MarketPrice: g.MarketPrice,
+		GoodsBrief:  g.GoodsBrief,
+		ShopPrice:   g.ShopPrice,
+	}
+}
+
+func (g *Goods) syncToES() error {
+	esModel := g.toEsModel()
+	data, err := json.Marshal(esModel)
+	if err != nil {
+		return err
+	}
+
+	res, err := global.ES.Index(
+		esModel.GetIndexName(),
+		bytes.NewReader(data),
+		global.ES.Index.WithDocumentID(strconv.Itoa(int(esModel.ID))),
+	)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		respBody, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("sync goods to es failed: %s", string(respBody))
+	}
+
+	return nil
+}
+
+func (g *Goods) deleteFromES() error {
+	res, err := global.ES.Delete(g.toEsModel().GetIndexName(), strconv.Itoa(int(g.ID)))
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	// 文档不存在也视为删除成功，避免重复删除导致业务失败。
+	if res.StatusCode == 404 {
+		return nil
+	}
+	if res.IsError() {
+		respBody, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("delete goods from es failed: %s", string(respBody))
+	}
+
+	return nil
+}
+
+// 向goods表中插入一行数据时，自动调用的钩子函数
+func (g *Goods) AfterCreate(tx *gorm.DB) (err error) {
+	return g.syncToES()
+}
+
+func (g *Goods) AfterUpdate(tx *gorm.DB) (err error) {
+	return g.syncToES()
+}
+
+func (g *Goods) AfterDelete(tx *gorm.DB) (err error) {
+	return g.deleteFromES()
 }

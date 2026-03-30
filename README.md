@@ -60,8 +60,17 @@ global.DB.Where(&model.OrderInfo{User: req.UserId}).Find(&orderList) // right，
 // 这意味着，Where 仅创建查询条件，并不关心表模型。
 ```
 
-### Unscoped
+### Unscoped 
 ```js
 // 忽略软删除，之前查询某个纪录，如果那条记录被软删除了，则查不到。现在可以查到。
 // 之前删除其实是更新了delete_at和is_delete，现在直接物理删除。
 ```
+
+### 商品服务集成es
+为什么是在srv层进行es的增删改查操作？
+原因在于如果将es操作放在api层，对于新建商品，可能会出现sql写入成功但是es写入失败，这需要使用比较复杂的分布式事务解决。
+但在srv层可讲sql操作和es操作放到同一个事务当中。
+1. 搜索 （对应goodsList api）
+2. 新增商品 （对应createGood api）
+3. 更改商品 （对应updateGood api）
+4. 删除商品 （对应deleteGood api）
