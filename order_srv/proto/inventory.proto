@@ -17,6 +17,7 @@ message GoodInvInfo {
 
 message SellInfo {
     repeated GoodInvInfo goodsInfo = 1; // 数组类型，可能会有同时扣减多件商品库存的需求
+    string orderSn = 2;
 }
 
 message MsgTips {

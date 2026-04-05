@@ -77,6 +77,7 @@ func (x *GoodInvInfo) GetNum() int32 {
 type SellInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GoodsInfo     []*GoodInvInfo         `protobuf:"bytes,1,rep,name=goodsInfo,proto3" json:"goodsInfo,omitempty"` // 数组类型，可能会有同时扣减多件商品库存的需求
+	OrderSn       string                 `protobuf:"bytes,2,opt,name=orderSn,proto3" json:"orderSn,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -116,6 +117,13 @@ func (x *SellInfo) GetGoodsInfo() []*GoodInvInfo {
 		return x.GoodsInfo
 	}
 	return nil
+}
+
+func (x *SellInfo) GetOrderSn() string {
+	if x != nil {
+		return x.OrderSn
+	}
+	return ""
 }
 
 type MsgTips struct {
@@ -169,9 +177,10 @@ const file_inventory_proto_rawDesc = "" +
 	"\x0finventory.proto\x1a\x1bgoogle/protobuf/empty.proto\"7\n" +
 	"\vGoodInvInfo\x12\x16\n" +
 	"\x06goodId\x18\x01 \x01(\x05R\x06goodId\x12\x10\n" +
-	"\x03num\x18\x02 \x01(\x05R\x03num\"6\n" +
+	"\x03num\x18\x02 \x01(\x05R\x03num\"P\n" +
 	"\bSellInfo\x12*\n" +
-	"\tgoodsInfo\x18\x01 \x03(\v2\f.GoodInvInfoR\tgoodsInfo\"\x1b\n" +
+	"\tgoodsInfo\x18\x01 \x03(\v2\f.GoodInvInfoR\tgoodsInfo\x12\x18\n" +
+	"\aorderSn\x18\x02 \x01(\tR\aorderSn\"\x1b\n" +
 	"\aMsgTips\x12\x10\n" +
 	"\x03msg\x18\x01 \x01(\tR\x03msg2\xae\x01\n" +
 	"\tInventory\x12.\n" +

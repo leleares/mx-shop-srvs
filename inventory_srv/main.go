@@ -14,6 +14,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/apache/rocketmq-client-go/v2"
+	"github.com/apache/rocketmq-client-go/v2/consumer"
 	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -53,6 +55,16 @@ func main() {
 
 	// 注册服务健康检查
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
+
+	// 启动服务
+	go func() {
+		err = server.Serve(lis)
+		if err != nil {
+			panic("failed to start grpc!" + err.Error())
+		}
+	}()
+
+	// 服务注册
 	serviceId := uuid.NewV4()
 	serviceIdStr := fmt.Sprintf("%s", serviceId)
 	registerClient := consul.NewRegistryClient(global.ServerConfig.ConsulInfo.Host, global.ServerConfig.ConsulInfo.Port)
@@ -61,16 +73,27 @@ func main() {
 		s.Errorf("注册健康检查时发生了错误")
 	}
 
-	go func() {
-		err = server.Serve(lis)
-		if err != nil {
-			panic("failed to start grpc!" + err.Error())
-		}
-	}()
+	// 监听库存归还topic
+	c, _ := rocketmq.NewPushConsumer(
+		consumer.WithGroupName("mxshop-inventory"),
+		consumer.WithNameServer([]string{"127.0.0.1:9876"}),
+	)
+	err = c.Subscribe("order_reback", consumer.MessageSelector{}, handler.MqRebackCb)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	// Note: start after subscribe
+	err = c.Start()
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(-1)
+	}
+
 	quit := make(chan os.Signal)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	err = registerClient.DeRegister(serviceIdStr)
+	_ = c.Shutdown()
 	if err != nil {
 		s.Errorf("注销失败")
 	} else {

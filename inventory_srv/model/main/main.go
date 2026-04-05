@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"log"
 	"mx-shop-srvs/inventory_srv/model"
@@ -47,5 +48,16 @@ func main() {
 	}
 
 	// 在库里生成表
-	_ = db.AutoMigrate(&model.Inventory{})
+	// _ = db.AutoMigrate(&model.StockSellDetail{})
+	// stockSellDetail := model.StockSellDetail{
+	// 	OrderSn: "wanglele",
+	// 	Status:  1,
+	// 	Detail:  []model.GoodsDetail{{1, 2}, {2, 3}},
+	// }
+
+	// db.Create(stockSellDetail)
+
+	var detail model.StockSellDetail
+	_ = db.Model(&model.StockSellDetail{}).Where("order_sn = ?", "wanglele").Find(&detail)
+	fmt.Println(detail)
 }

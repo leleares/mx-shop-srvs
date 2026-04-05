@@ -2,12 +2,16 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"mx-shop-srvs/inventory_srv/global"
 	"mx-shop-srvs/inventory_srv/model"
 	"mx-shop-srvs/inventory_srv/proto"
 	"sync"
 
+	"github.com/apache/rocketmq-client-go/v2/consumer"
+	"github.com/apache/rocketmq-client-go/v2/primitive"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -79,6 +83,21 @@ func (s *InventoryServer) Sell(ctx context.Context, req *proto.SellInfo) (*proto
 	// rs := redsync.New(pool)
 
 	tx := global.DB.Begin()
+	// 这里进行记录订单中商品销售与归还状态
+	stockSellDetail := model.StockSellDetail{
+		OrderSn: req.OrderSn,
+		Status:  1,
+	}
+	detail := make([]model.GoodsDetail, 0)
+	// 构造Detail
+	for _, goodInfo := range req.GoodsInfo {
+		detail = append(detail, model.GoodsDetail{
+			Goods: goodInfo.GoodId,
+			Num:   goodInfo.Num,
+		})
+	}
+	stockSellDetail.Detail = detail
+
 	for _, goodInfo := range req.GoodsInfo {
 		var inventory model.Inventory
 		// redis锁
@@ -113,6 +132,11 @@ func (s *InventoryServer) Sell(ctx context.Context, req *proto.SellInfo) (*proto
 		// 	zap.S().Error("更新库存信息失败") // 继续循环，重新查询然后再次执行逻辑
 		// }
 	}
+	result := tx.Create(&stockSellDetail)
+	if result.RowsAffected == 0 {
+		tx.Rollback()
+		return nil, status.Errorf(codes.Internal, fmt.Sprintf("%s保存库存扣减历史失败", req.OrderSn))
+	}
 	tx.Commit() // Commit 后才真正执行更新数据库的操作
 	return &proto.MsgTips{
 		Msg: "success",
@@ -134,4 +158,46 @@ func (s *InventoryServer) Reback(ctx context.Context, req *proto.SellInfo) (*emp
 	}
 	tx.Commit()
 	return &emptypb.Empty{}, nil
+}
+
+func MqRebackCb(ctx context.Context, msgs ...*primitive.MessageExt) (consumer.ConsumeResult, error) {
+	type OrderInfo struct {
+		OrderSn string
+	}
+	for _, msg := range msgs {
+		var orderInfo OrderInfo
+		err := json.Unmarshal(msg.Body, &orderInfo)
+		if err != nil {
+			zap.S().Errorf("json解析失败:%s", msg)
+			return consumer.ConsumeSuccess, err
+		}
+
+		//1. 首先查询sellstockdetail表是否做过归还 2.更改inventory表添加库存 3. 更改sellstockdetail表的status为2
+		tx := global.DB.Begin()
+		var sellStockDetail model.StockSellDetail
+		result := tx.Model(&model.StockSellDetail{}).Where("order_sn = ?", orderInfo.OrderSn).Find(&sellStockDetail)
+		if result.RowsAffected == 0 {
+			zap.S().Errorf("未找到记录:%s", orderInfo.OrderSn)
+			return consumer.ConsumeSuccess, err
+		}
+
+		if sellStockDetail.Status == 2 {
+			zap.S().Errorf("绝不能重复归还库存:%s", orderInfo.OrderSn)
+			return consumer.ConsumeSuccess, err
+		}
+
+		// 归还inventory库存
+		for _, Good := range sellStockDetail.Detail {
+			result := tx.Model(&model.Inventory{}).Where("good = ?", Good.Goods).Update("stock", gorm.Expr("stock + ?", Good.Num)) // stock += ?
+			if result.RowsAffected == 0 {
+				tx.Rollback()
+				return consumer.ConsumeRetryLater, nil
+			}
+		}
+
+		// 更改sellstockdetail表的status为2
+		tx.Model(&model.StockSellDetail{}).Where("order_sn = ?", sellStockDetail.OrderSn).Update("status", 2)
+		tx.Commit()
+	}
+	return consumer.ConsumeSuccess, nil
 }
