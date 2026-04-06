@@ -195,5 +195,6 @@ https://piccdn2.umiwi.com/fe-oss/default/MTc3NTI5ODExMzEz.png
 3. 幂等表。 多整一张表（id唯一），用于记录更新或者插入情况，请求来之前先向这个表中insert数据，能insert成功代表没处理过这个请求，insert不成功代表处理过这个请求。
 4. 基于状态机的条件更新。表中加一个字段status，表示该记录是否更新过：INIT → PROCESSING → SUCCESS / FAIL，更新时就可以 UPDATE order SET status = 'SUCCESS' WHERE order_id = ? AND status = 'PROCESSING'
 
-
-
+### 链路追踪技术 
+对于微服务架构，一个api请求可能设计多个服务的相互调用，如果这个api异常了，排查问题只能逐个服务观看日志分析原因，效率低下。
+有了链路追踪，可以为这个api请求分配一个唯一的traceId，在整个微服务体系中的每一跳都会记录耗时等情况，还能将这些数据可视化。也就是说只要能拿到traceId，则可以排查各个服务的调用情况，排查问题更容易。
