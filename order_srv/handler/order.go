@@ -13,6 +13,8 @@ import (
 
 	"github.com/apache/rocketmq-client-go/v2/consumer"
 	"github.com/apache/rocketmq-client-go/v2/primitive"
+	"github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -144,6 +146,7 @@ type orderTxResult struct {
 }
 
 var orderTxResults sync.Map
+var orderTraceContexts sync.Map
 
 func storeOrderTxResult(orderSn string, result orderTxResult) {
 	orderTxResults.Store(orderSn, result)
@@ -163,6 +166,42 @@ func loadOrderTxResult(orderSn string) (orderTxResult, bool) {
 	return txResult, true
 }
 
+func storeOrderTraceContext(orderSn string, spanContext opentracing.SpanContext) {
+	orderTraceContexts.Store(orderSn, spanContext)
+}
+
+func deleteOrderTraceContext(orderSn string) {
+	orderTraceContexts.Delete(orderSn)
+}
+
+func startOrderStepSpan(orderSn, operation string) opentracing.Span {
+	parentContext, ok := orderTraceContexts.Load(orderSn)
+	if ok {
+		if spanContext, ok := parentContext.(opentracing.SpanContext); ok {
+			span := opentracing.StartSpan(operation, opentracing.ChildOf(spanContext))
+			span.SetTag("order_sn", orderSn)
+			return span
+		}
+	}
+
+	span := opentracing.StartSpan(operation)
+	span.SetTag("order_sn", orderSn)
+	return span
+}
+
+func logSpanError(span opentracing.Span, err error, message string) {
+	if span == nil || err == nil {
+		return
+	}
+
+	span.SetTag("error", true)
+	span.LogFields(
+		otlog.String("event", "error"),
+		otlog.String("message", message),
+		otlog.String("detail", err.Error()),
+	)
+}
+
 func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitive.LocalTransactionState {
 	var orderInfo model.OrderInfo
 	_ = json.Unmarshal(msg.Body, &orderInfo)
@@ -170,13 +209,19 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 	var goodIds []int32
 	var shoppingCartSelectedItems []model.ShoppingCart
 	goodNumsMap := make(map[int32]int32) // 该map用于承载购物车中商品id和数量的映射关系，便于后续根据商品id查数量
+
+	shopCartSpan := startOrderStepSpan(orderInfo.OrderSn, "order.select_shopcart")
 	result := global.DB.Where(&model.ShoppingCart{User: orderInfo.User, Checked: true}).Find(&shoppingCartSelectedItems)
 	if result.RowsAffected == 0 {
+		shopCartSpan.SetTag("error", true)
+		shopCartSpan.LogFields(otlog.String("message", "没有选中结算的商品"))
+		shopCartSpan.Finish()
 		txResult.Code = codes.InvalidArgument
 		txResult.Msg = "没有选中结算的商品"
 		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.RollbackMessageState
 	}
+	shopCartSpan.Finish()
 
 	for _, s := range shoppingCartSelectedItems {
 		goodIds = append(goodIds, s.Goods)
@@ -184,15 +229,19 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 	}
 
 	// 调用商品服务
+	queryGoodsSpan := startOrderStepSpan(orderInfo.OrderSn, "order.query_goods")
 	resp, err := global.GoodSrvClient.BatchGetGoods(context.Background(), &proto.BatchGoodsIdInfo{
 		Id: goodIds,
 	})
 	if err != nil {
+		logSpanError(queryGoodsSpan, err, "批量查询商品信息失败")
+		queryGoodsSpan.Finish()
 		txResult.Code = codes.Internal
 		txResult.Msg = "批量查询商品信息失败"
 		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.RollbackMessageState
 	}
+	queryGoodsSpan.Finish()
 
 	// 用户应付金额
 	var totalAmount float32
@@ -220,16 +269,20 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 	}
 
 	// 调用库存服务
+	queryInventorySpan := startOrderStepSpan(orderInfo.OrderSn, "order.sell_inventory")
 	_, err = global.InventorySrvClient.Sell(context.Background(), &proto.SellInfo{
 		OrderSn:   orderInfo.OrderSn,
 		GoodsInfo: goodsInfo,
 	})
 	if err != nil {
+		logSpanError(queryInventorySpan, err, "扣减库存失败")
+		queryInventorySpan.Finish()
 		txResult.Code = codes.ResourceExhausted
 		txResult.Msg = "扣减库存失败"
 		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.RollbackMessageState
 	}
+	queryInventorySpan.Finish()
 
 	tx := global.DB.Begin()
 
@@ -237,14 +290,18 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 	orderInfo.OrderMount = totalAmount
 	orderInfo.Status = string(model.TradeStatusWaitBuyerPay)
 
+	saveOrderSpan := startOrderStepSpan(orderInfo.OrderSn, "order.save_order")
 	result = tx.Save(&orderInfo)
 	if result.Error != nil {
+		logSpanError(saveOrderSpan, result.Error, "创建订单失败")
+		saveOrderSpan.Finish()
 		txResult.Code = codes.Internal
 		txResult.Msg = "创建订单失败"
 		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		tx.Rollback()
 		return primitive.CommitMessageState
 	}
+	saveOrderSpan.Finish()
 
 	txResult.ID = orderInfo.ID
 	txResult.OrderAmount = totalAmount
@@ -255,24 +312,32 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 	}
 
 	// 将订单商品表数据批量插入至订单商品表中
+	saveOrderGoodsSpan := startOrderStepSpan(orderInfo.OrderSn, "order.save_order_goods")
 	result = tx.CreateInBatches(orderGoods, 100) // 将数据批量插入至表中，如果这批数据大于100个，那么grom想办法分批帮我们插入
 	if result.Error != nil {
+		logSpanError(saveOrderGoodsSpan, result.Error, "批量插入订单商品失败")
+		saveOrderGoodsSpan.Finish()
 		txResult.Code = codes.Internal
 		txResult.Msg = "批量插入订单商品失败"
 		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		tx.Rollback()
 		return primitive.CommitMessageState
 	}
+	saveOrderGoodsSpan.Finish()
 
 	// 更新购物车
+	deleteCartSpan := startOrderStepSpan(orderInfo.OrderSn, "order.delete_shopcart")
 	result = tx.Where(&model.ShoppingCart{User: orderInfo.User, Checked: true}).Delete(&model.ShoppingCart{})
 	if result.Error != nil {
+		logSpanError(deleteCartSpan, result.Error, "删除购物车记录失败")
+		deleteCartSpan.Finish()
 		txResult.Code = codes.Internal
 		txResult.Msg = "删除购物车记录失败"
 		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		tx.Rollback()
 		return primitive.CommitMessageState
 	}
+	deleteCartSpan.Finish()
 
 	// 处理订单超时问题，向mq中投递延时消息，订单30分钟后过期
 	if global.OrderProducer == nil {
@@ -289,9 +354,13 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 		Body:  msg.Body,
 	}
 	msg.WithDelayTimeLevel(5) // 5为1分钟，16为30分钟 // 发送延时消息
+
+	sendDelayMsgSpan := startOrderStepSpan(orderInfo.OrderSn, "order.send_timeout_message")
 	_, err = global.OrderProducer.SendSync(context.Background(), msg)
 
 	if err != nil {
+		logSpanError(sendDelayMsgSpan, err, "发送延时消息失败")
+		sendDelayMsgSpan.Finish()
 		zap.S().Errorf("发送延时消息失败: %v\n", err)
 		tx.Rollback()
 		txResult.Code = codes.Internal
@@ -299,6 +368,7 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.CommitMessageState
 	}
+	sendDelayMsgSpan.Finish()
 	tx.Commit()
 	txResult.Code = codes.OK
 	storeOrderTxResult(orderInfo.OrderSn, txResult)
@@ -345,6 +415,10 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 		return nil, status.Error(codes.Internal, "事务producer未初始化")
 	}
 
+	createOrderSpan, ctx := opentracing.StartSpanFromContext(ctx, "order.CreateOrder")
+	createOrderSpan.SetTag("user.id", req.UserId)
+	defer createOrderSpan.Finish()
+
 	// 创建订单
 	order := model.OrderInfo{
 		User:         req.UserId,
@@ -354,6 +428,9 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 		SingerMobile: req.Mobile,
 		Post:         req.Post,
 	}
+	createOrderSpan.SetTag("order.sn", order.OrderSn)
+	storeOrderTraceContext(order.OrderSn, createOrderSpan.Context())
+	defer deleteOrderTraceContext(order.OrderSn)
 
 	orderJsonStr, _ := json.Marshal(order)
 
@@ -361,20 +438,30 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 		Topic: "order_reback", // 库存归还
 		Body:  orderJsonStr,
 	}
-	_, err := global.OrderTxProducer.SendMessageInTransaction(context.Background(), msg)
-
+	sendTxMsgSpan := opentracing.StartSpan("order.send_tx_message", opentracing.ChildOf(createOrderSpan.Context()))
+	_, err := global.OrderTxProducer.SendMessageInTransaction(ctx, msg)
 	if err != nil {
+		logSpanError(sendTxMsgSpan, err, "发送事务消息失败")
+		sendTxMsgSpan.Finish()
 		fmt.Printf("send message error: %s\n", err)
 		return nil, status.Error(codes.Internal, "发送消息失败")
 	}
+	sendTxMsgSpan.Finish()
 
 	// 本地事务执行失败
+	waitTxResultSpan := opentracing.StartSpan("order.wait_tx_result", opentracing.ChildOf(createOrderSpan.Context()))
 	txResult, ok := loadOrderTxResult(order.OrderSn)
 	if !ok {
+		waitTxResultSpan.SetTag("error", true)
+		waitTxResultSpan.LogFields(otlog.String("message", "未获取到事务执行结果"))
+		waitTxResultSpan.Finish()
 		return nil, status.Error(codes.Internal, "未获取到事务执行结果")
 	}
+	waitTxResultSpan.Finish()
 
 	if txResult.Code != codes.OK {
+		createOrderSpan.SetTag("error", true)
+		createOrderSpan.LogFields(otlog.String("message", txResult.Msg))
 		return nil, status.Error(txResult.Code, txResult.Msg)
 	}
 
