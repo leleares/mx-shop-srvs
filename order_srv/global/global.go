@@ -4,6 +4,7 @@ import (
 	"mx-shop-srvs/order_srv/config"
 	"mx-shop-srvs/order_srv/proto"
 
+	"github.com/apache/rocketmq-client-go/v2"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -15,4 +16,7 @@ var (
 	RedisClient        *redis.Client         // 全局redis连接
 	GoodSrvClient      proto.GoodsClient     // 商品服务
 	InventorySrvClient proto.InventoryClient // 库存服务
+	RocketMQNameServer                       = []string{"127.0.0.1:9876"}
+	OrderProducer      rocketmq.Producer
+	OrderTxProducer    rocketmq.TransactionProducer
 )

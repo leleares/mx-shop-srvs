@@ -8,12 +8,11 @@ import (
 	"mx-shop-srvs/order_srv/global"
 	"mx-shop-srvs/order_srv/model"
 	"mx-shop-srvs/order_srv/proto"
+	"sync"
 	"time"
 
-	"github.com/apache/rocketmq-client-go/v2"
 	"github.com/apache/rocketmq-client-go/v2/consumer"
 	"github.com/apache/rocketmq-client-go/v2/primitive"
-	"github.com/apache/rocketmq-client-go/v2/producer"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -135,23 +134,47 @@ func (s *OrderServer) DeleteCartItem(ctx context.Context, req *proto.CartItemReq
 }
 
 // 事务消息需要
-type OrderListener struct {
+type OrderListener struct{}
+
+type orderTxResult struct {
 	Code        codes.Code
 	Msg         string
 	ID          int32
 	OrderAmount float32
 }
 
+var orderTxResults sync.Map
+
+func storeOrderTxResult(orderSn string, result orderTxResult) {
+	orderTxResults.Store(orderSn, result)
+}
+
+func loadOrderTxResult(orderSn string) (orderTxResult, bool) {
+	result, ok := orderTxResults.LoadAndDelete(orderSn)
+	if !ok {
+		return orderTxResult{}, false
+	}
+
+	txResult, ok := result.(orderTxResult)
+	if !ok {
+		return orderTxResult{}, false
+	}
+
+	return txResult, true
+}
+
 func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitive.LocalTransactionState {
 	var orderInfo model.OrderInfo
 	_ = json.Unmarshal(msg.Body, &orderInfo)
+	txResult := orderTxResult{}
 	var goodIds []int32
 	var shoppingCartSelectedItems []model.ShoppingCart
 	goodNumsMap := make(map[int32]int32) // 该map用于承载购物车中商品id和数量的映射关系，便于后续根据商品id查数量
 	result := global.DB.Where(&model.ShoppingCart{User: orderInfo.User, Checked: true}).Find(&shoppingCartSelectedItems)
 	if result.RowsAffected == 0 {
-		l.Code = codes.InvalidArgument
-		l.Msg = "没有选中结算的商品"
+		txResult.Code = codes.InvalidArgument
+		txResult.Msg = "没有选中结算的商品"
+		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.RollbackMessageState
 	}
 
@@ -165,8 +188,9 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 		Id: goodIds,
 	})
 	if err != nil {
-		l.Code = codes.Internal
-		l.Msg = "批量查询商品信息失败"
+		txResult.Code = codes.Internal
+		txResult.Msg = "批量查询商品信息失败"
+		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.RollbackMessageState
 	}
 
@@ -201,8 +225,9 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 		GoodsInfo: goodsInfo,
 	})
 	if err != nil {
-		l.Code = codes.ResourceExhausted
-		l.Msg = "扣减库存失败"
+		txResult.Code = codes.ResourceExhausted
+		txResult.Msg = "扣减库存失败"
+		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.RollbackMessageState
 	}
 
@@ -214,14 +239,15 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 
 	result = tx.Save(&orderInfo)
 	if result.Error != nil {
-		l.Code = codes.Internal
-		l.Msg = "创建订单失败"
+		txResult.Code = codes.Internal
+		txResult.Msg = "创建订单失败"
+		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		tx.Rollback()
 		return primitive.CommitMessageState
 	}
 
-	l.ID = orderInfo.ID
-	l.OrderAmount = totalAmount
+	txResult.ID = orderInfo.ID
+	txResult.OrderAmount = totalAmount
 
 	// 更新 orderGoods
 	for index := range orderGoods {
@@ -231,8 +257,9 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 	// 将订单商品表数据批量插入至订单商品表中
 	result = tx.CreateInBatches(orderGoods, 100) // 将数据批量插入至表中，如果这批数据大于100个，那么grom想办法分批帮我们插入
 	if result.Error != nil {
-		l.Code = codes.Internal
-		l.Msg = "批量插入订单商品失败"
+		txResult.Code = codes.Internal
+		txResult.Msg = "批量插入订单商品失败"
+		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		tx.Rollback()
 		return primitive.CommitMessageState
 	}
@@ -240,31 +267,20 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 	// 更新购物车
 	result = tx.Where(&model.ShoppingCart{User: orderInfo.User, Checked: true}).Delete(&model.ShoppingCart{})
 	if result.Error != nil {
-		l.Code = codes.Internal
-		l.Msg = "删除购物车记录失败"
+		txResult.Code = codes.Internal
+		txResult.Msg = "删除购物车记录失败"
+		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		tx.Rollback()
 		return primitive.CommitMessageState
 	}
 
 	// 处理订单超时问题，向mq中投递延时消息，订单30分钟后过期
-	p, err := rocketmq.NewProducer(
-		producer.WithNameServer([]string{"127.0.0.1:9876"}),
-		producer.WithGroupName("order_tx_producer"),
-	)
-	if err != nil {
-		zap.S().Errorf("创建producer失败: %v\n", err)
+	if global.OrderProducer == nil {
+		zap.S().Error("全局普通producer未初始化")
 		tx.Rollback()
-		l.Code = codes.Internal
-		l.Msg = "创建producer失败"
-		return primitive.CommitMessageState
-	}
-
-	err = p.Start()
-	if err != nil {
-		zap.S().Errorf("启动producer失败: %v\n", err)
-		tx.Rollback()
-		l.Code = codes.Internal
-		l.Msg = "启动producer失败"
+		txResult.Code = codes.Internal
+		txResult.Msg = "普通producer未初始化"
+		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.CommitMessageState
 	}
 
@@ -273,21 +289,19 @@ func (l *OrderListener) ExecuteLocalTransaction(msg *primitive.Message) primitiv
 		Body:  msg.Body,
 	}
 	msg.WithDelayTimeLevel(5) // 5为1分钟，16为30分钟 // 发送延时消息
-	_, err = p.SendSync(context.Background(), msg)
+	_, err = global.OrderProducer.SendSync(context.Background(), msg)
 
 	if err != nil {
 		zap.S().Errorf("发送延时消息失败: %v\n", err)
 		tx.Rollback()
-		l.Code = codes.Internal
-		l.Msg = "发送延时消息失败"
+		txResult.Code = codes.Internal
+		txResult.Msg = "发送延时消息失败"
+		storeOrderTxResult(orderInfo.OrderSn, txResult)
 		return primitive.CommitMessageState
 	}
-	// err = p.Shutdown()
-	// if err != nil {
-	// 	fmt.Printf("shutdown producer error: %s", err.Error())
-	// }
 	tx.Commit()
-	l.Code = codes.OK
+	txResult.Code = codes.OK
+	storeOrderTxResult(orderInfo.OrderSn, txResult)
 	return primitive.RollbackMessageState
 }
 
@@ -327,19 +341,8 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 		4. 如果本地事务执行失败，那应该给rocketmq发送commit消息（回滚库存）。否则给rocketmq发送更rollback消息。
 	*/
 
-	orderListener := OrderListener{}
-
-	p, err := rocketmq.NewTransactionProducer(&orderListener, producer.WithNameServer([]string{"127.0.0.1:9876"}))
-
-	if err != nil {
-		zap.S().Errorf("生成producer失败:%s", err.Error())
-
-	}
-
-	err = p.Start()
-	if err != nil {
-		zap.S().Errorf("start producer error: %s", err.Error())
-		return nil, err
+	if global.OrderTxProducer == nil {
+		return nil, status.Error(codes.Internal, "事务producer未初始化")
 	}
 
 	// 创建订单
@@ -358,7 +361,7 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 		Topic: "order_reback", // 库存归还
 		Body:  orderJsonStr,
 	}
-	_, err = p.SendMessageInTransaction(context.Background(), msg)
+	_, err := global.OrderTxProducer.SendMessageInTransaction(context.Background(), msg)
 
 	if err != nil {
 		fmt.Printf("send message error: %s\n", err)
@@ -366,16 +369,16 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *proto.OrderRequest) 
 	}
 
 	// 本地事务执行失败
-	if orderListener.Code != codes.OK {
-		return nil, status.Error(orderListener.Code, orderListener.Msg)
+	txResult, ok := loadOrderTxResult(order.OrderSn)
+	if !ok {
+		return nil, status.Error(codes.Internal, "未获取到事务执行结果")
 	}
 
-	// err = p.Shutdown()
-	// if err != nil {
-	// 	fmt.Printf("shutdown producer error: %s", err.Error())
-	// }
+	if txResult.Code != codes.OK {
+		return nil, status.Error(txResult.Code, txResult.Msg)
+	}
 
-	return &proto.OrderInfoResponse{Id: orderListener.ID, OrderSn: order.OrderSn, Total: orderListener.OrderAmount}, nil
+	return &proto.OrderInfoResponse{Id: txResult.ID, OrderSn: order.OrderSn, Total: txResult.OrderAmount}, nil
 }
 
 func (s *OrderServer) OrderList(ctx context.Context, req *proto.OrderFilterRequest) (*proto.OrderListResponse, error) {
@@ -496,19 +499,9 @@ func OrderTimeoutCb(ctx context.Context, msgs ...*primitive.MessageExt) (consume
 			}
 
 			// 归还库存逻辑，怎么归还库存？向mq中写入消息:order_reback
-			p, err := rocketmq.NewProducer(
-				producer.WithNsResolver(primitive.NewPassthroughResolver([]string{"127.0.0.1:9876"})),
-				producer.WithGroupName("order_timeout_producer"),
-			)
-			if err != nil {
+			if global.OrderProducer == nil {
 				tx.Rollback()
-				return consumer.ConsumeRetryLater, err
-			}
-
-			err = p.Start()
-			if err != nil {
-				tx.Rollback()
-				return consumer.ConsumeRetryLater, err
+				return consumer.ConsumeRetryLater, status.Error(codes.Internal, "普通producer未初始化")
 			}
 			order := model.OrderInfo{
 				OrderSn: orderInfo.OrderSn, // 订单号
@@ -520,7 +513,7 @@ func OrderTimeoutCb(ctx context.Context, msgs ...*primitive.MessageExt) (consume
 				Topic: "order_reback", // 库存归还
 				Body:  orderJsonStr,
 			}
-			_, err = p.SendSync(context.Background(), msg)
+			_, err = global.OrderProducer.SendSync(context.Background(), msg)
 			if err != nil {
 				tx.Rollback()
 				return consumer.ConsumeRetryLater, err

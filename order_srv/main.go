@@ -35,6 +35,7 @@ func main() {
 	initialize.InitDB()
 	initialize.InitRedisClient()
 	initialize.InitSrv()
+	initialize.InitMQ()
 
 	s := zap.S()
 	flag.Parse()
@@ -78,7 +79,7 @@ func main() {
 	// 监听订单超时topic
 	c, _ := rocketmq.NewPushConsumer(
 		consumer.WithGroupName("mxshop-order"),
-		consumer.WithNameServer([]string{"127.0.0.1:9876"}),
+		consumer.WithNameServer(global.RocketMQNameServer),
 	)
 	err = c.Subscribe("order_timeout", consumer.MessageSelector{}, handler.OrderTimeoutCb)
 	if err != nil {
@@ -90,11 +91,13 @@ func main() {
 		fmt.Println(err.Error())
 		os.Exit(-1)
 	}
+	defer c.Shutdown()
 
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	err = registerClient.DeRegister(serviceIdStr)
+	initialize.CloseMQ()
 	if err != nil {
 		s.Errorf("注销失败")
 	} else {
